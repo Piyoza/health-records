@@ -13,27 +13,16 @@ import { router } from 'expo-router';
 
 import { supabase } from '../../lib/supabase';
 
-export default function RegisterScreen() {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [loading, setLoading] = useState(false);
 
-  const handleRegister = async () => {
-    if (!firstName || !lastName || !email || !password) {
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
       Alert.alert(
-        'Error',
-        'Please complete all fields.'
-      );
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert(
-        'Error',
-        'Password must contain at least 6 characters.'
+        'Missing information',
+        'Please enter your email and password.'
       );
       return;
     }
@@ -41,75 +30,56 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-          },
-        },
-      });
-
-      console.log('REGISTER RESPONSE:', {
-        data,
-        error,
-      });
+      const { data, error } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
       if (error) {
+        Alert.alert('Login failed', error.message);
+        return;
+      }
+
+      if (!data.user) {
         Alert.alert(
-          'Registration failed',
-          error.message
+          'Login failed',
+          'No user was returned.'
         );
         return;
       }
 
       Alert.alert(
-        'Registration successful',
-        'Your account has been created.'
+        'Login successful',
+        'Welcome back!'
       );
 
     } catch (error) {
-      console.log('REGISTER ERROR:', error);
+      console.log('LOGIN ERROR:', error);
 
       Alert.alert(
         'Error',
-        'Something went wrong during registration.'
+        'Something went wrong while logging in.'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const goToLogin = () => {
-    router.push('/(auth)/login');
+  const goToRegister = () => {
+    router.push('/(auth)/register');
   };
 
   return (
     <View style={styles.container}>
 
       <Text style={styles.title}>
-        Create Account
+        Welcome Back
       </Text>
 
       <Text style={styles.subtitle}>
-        Register as a healthcare worker
+        Login to your healthcare account
       </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="First name"
-        value={firstName}
-        onChangeText={setFirstName}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Last name"
-        value={lastName}
-        onChangeText={setLastName}
-      />
 
       <TextInput
         style={styles.input}
@@ -135,28 +105,24 @@ export default function RegisterScreen() {
           styles.button,
           loading && styles.buttonDisabled,
         ]}
-        onPress={handleRegister}
+        onPress={handleLogin}
         disabled={loading}
       >
         <Text style={styles.buttonText}>
-          {loading
-            ? 'Creating account...'
-            : 'Register'}
+          {loading ? 'Logging in...' : 'Login'}
         </Text>
       </TouchableOpacity>
 
-      <View style={styles.loginContainer}>
-
-        <Text style={styles.loginText}>
-          Already have an account?
+      <View style={styles.registerContainer}>
+        <Text style={styles.registerText}>
+          Don't have an account?
         </Text>
 
-        <TouchableOpacity onPress={goToLogin}>
-          <Text style={styles.loginButton}>
-            Login
+        <TouchableOpacity onPress={goToRegister}>
+          <Text style={styles.registerButton}>
+            Register
           </Text>
         </TouchableOpacity>
-
       </View>
 
     </View>
@@ -212,19 +178,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  loginContainer: {
+  registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
   },
 
-  loginText: {
+  registerText: {
     fontSize: 15,
     color: '#666666',
   },
 
-  loginButton: {
+  registerButton: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1d4ed8',
