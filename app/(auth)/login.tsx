@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
 import {
+  ActivityIndicator,
   Alert,
   StyleSheet,
   Text,
@@ -9,7 +8,8 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import { useState } from 'react';
+import { Link } from 'expo-router';
 
 import { supabase } from '../../lib/supabase';
 
@@ -30,6 +30,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
+      console.log('LOGIN: attempting...');
+
       const { data, error } =
         await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -37,25 +39,33 @@ export default function LoginScreen() {
         });
 
       if (error) {
-        Alert.alert('Login failed', error.message);
+        console.error(
+          'LOGIN ERROR:',
+          error.message
+        );
+
+        Alert.alert(
+          'Login failed',
+          error.message
+        );
+
         return;
       }
 
-      if (!data.user) {
-        Alert.alert(
-          'Login failed',
-          'No user was returned.'
-        );
-        return;
-      }
+      console.log(
+        'LOGIN SUCCESS:',
+        data.user?.id
+      );
 
       Alert.alert(
         'Login successful',
-        'Welcome back!'
+        `Welcome back ${data.user?.email}`
       );
-
     } catch (error) {
-      console.log('LOGIN ERROR:', error);
+      console.error(
+        'LOGIN EXCEPTION:',
+        error
+      );
 
       Alert.alert(
         'Error',
@@ -66,24 +76,23 @@ export default function LoginScreen() {
     }
   };
 
-  const goToRegister = () => {
-    router.push('/(auth)/register');
-  };
-
   return (
     <View style={styles.container}>
+      <Text style={styles.logo}>
+        MediVault
+      </Text>
 
       <Text style={styles.title}>
         Welcome Back
       </Text>
 
       <Text style={styles.subtitle}>
-        Login to your healthcare account
+        Sign in to access patient records
       </Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Email address"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -97,34 +106,31 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        autoCapitalize="none"
       />
 
       <TouchableOpacity
         style={[
           styles.button,
-          loading && styles.buttonDisabled,
+          loading && styles.disabledButton,
         ]}
         onPress={handleLogin}
         disabled={loading}
       >
-        <Text style={styles.buttonText}>
-          {loading ? 'Logging in...' : 'Login'}
-        </Text>
+        {loading ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <><Text style={styles.buttonText}>
+              Sign In
+            </Text>
+            <Link
+              href="/(auth)/register"
+              style={styles.registerLink}
+            >
+                Don't have an account? Register
+              </Link></>
+        
+        )}
       </TouchableOpacity>
-
-      <View style={styles.registerContainer}>
-        <Text style={styles.registerText}>
-          Don't have an account?
-        </Text>
-
-        <TouchableOpacity onPress={goToRegister}>
-          <Text style={styles.registerButton}>
-            Register
-          </Text>
-        </TouchableOpacity>
-      </View>
-
     </View>
   );
 }
@@ -137,38 +143,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
+  logo: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#2563eb',
+    textAlign: 'center',
+    marginBottom: 35,
+  },
+
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
+    color: '#0f172a',
     marginBottom: 8,
   },
 
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 30,
+    fontSize: 15,
+    color: '#64748b',
+    marginBottom: 28,
   },
 
   input: {
     height: 52,
     borderWidth: 1,
-    borderColor: '#dddddd',
+    borderColor: '#cbd5e1',
     borderRadius: 10,
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     fontSize: 16,
+    color: '#0f172a',
   },
 
   button: {
     height: 52,
     borderRadius: 10,
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1d4ed8',
     marginTop: 8,
   },
 
-  buttonDisabled: {
+  disabledButton: {
     opacity: 0.6,
   },
 
@@ -178,22 +194,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-
-  registerText: {
-    fontSize: 15,
-    color: '#666666',
-  },
-
-  registerButton: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1d4ed8',
-    marginLeft: 5,
-  },
+  registerLink: {
+  textAlign: 'center',
+  marginTop: 20,
+  fontSize: 15,
+  color: '#2563eb',
+  fontWeight: '600',
+},
 });

@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
 import {
+  ActivityIndicator,
   Alert,
   StyleSheet,
   Text,
@@ -9,7 +8,7 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import { useState } from 'react';
 
 import { supabase } from '../../lib/supabase';
 
@@ -18,13 +17,17 @@ export default function RegisterScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!firstName || !lastName || !email || !password) {
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       Alert.alert(
-        'Error',
+        'Missing information',
         'Please complete all fields.'
       );
       return;
@@ -32,7 +35,7 @@ export default function RegisterScreen() {
 
     if (password.length < 6) {
       Alert.alert(
-        'Error',
+        'Invalid password',
         'Password must contain at least 6 characters.'
       );
       return;
@@ -41,53 +44,68 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-          },
-        },
-      });
+      console.log('REGISTER: attempting...');
 
-      console.log('REGISTER RESPONSE:', {
-        data,
-        error,
-      });
+      const { data, error } =
+        await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+            },
+          },
+        });
 
       if (error) {
+        console.error(
+          'REGISTER ERROR:',
+          error.message
+        );
+
         Alert.alert(
           'Registration failed',
           error.message
         );
+
         return;
       }
 
-      Alert.alert(
-        'Registration successful',
-        'Your account has been created.'
+      console.log(
+        'REGISTER SUCCESS:',
+        data.user?.id
       );
 
+      Alert.alert(
+        'Registration successful',
+        'Your MediVault account has been created.'
+      );
+
+      setFirstName('');
+      setLastName('');
+      setEmail('');
+      setPassword('');
     } catch (error) {
-      console.log('REGISTER ERROR:', error);
+      console.error(
+        'REGISTER EXCEPTION:',
+        error
+      );
 
       Alert.alert(
         'Error',
-        'Something went wrong during registration.'
+        'Something went wrong while registering.'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const goToLogin = () => {
-    router.push('/(auth)/login');
-  };
-
   return (
     <View style={styles.container}>
+      <Text style={styles.logo}>
+        MediVault
+      </Text>
 
       <Text style={styles.title}>
         Create Account
@@ -102,6 +120,7 @@ export default function RegisterScreen() {
         placeholder="First name"
         value={firstName}
         onChangeText={setFirstName}
+        autoCapitalize="words"
       />
 
       <TextInput
@@ -109,11 +128,12 @@ export default function RegisterScreen() {
         placeholder="Last name"
         value={lastName}
         onChangeText={setLastName}
+        autoCapitalize="words"
       />
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Email address"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -127,38 +147,24 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        autoCapitalize="none"
       />
 
       <TouchableOpacity
         style={[
           styles.button,
-          loading && styles.buttonDisabled,
+          loading && styles.disabledButton,
         ]}
         onPress={handleRegister}
         disabled={loading}
       >
-        <Text style={styles.buttonText}>
-          {loading
-            ? 'Creating account...'
-            : 'Register'}
-        </Text>
-      </TouchableOpacity>
-
-      <View style={styles.loginContainer}>
-
-        <Text style={styles.loginText}>
-          Already have an account?
-        </Text>
-
-        <TouchableOpacity onPress={goToLogin}>
-          <Text style={styles.loginButton}>
-            Login
+        {loading ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <Text style={styles.buttonText}>
+            Create Account
           </Text>
-        </TouchableOpacity>
-
-      </View>
-
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -171,38 +177,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
+  logo: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#2563eb',
+    textAlign: 'center',
+    marginBottom: 35,
+  },
+
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
+    color: '#0f172a',
     marginBottom: 8,
   },
 
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 30,
+    fontSize: 15,
+    color: '#64748b',
+    marginBottom: 28,
   },
 
   input: {
     height: 52,
     borderWidth: 1,
-    borderColor: '#dddddd',
+    borderColor: '#cbd5e1',
     borderRadius: 10,
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     fontSize: 16,
+    color: '#0f172a',
   },
 
   button: {
     height: 52,
     borderRadius: 10,
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1d4ed8',
     marginTop: 8,
   },
 
-  buttonDisabled: {
+  disabledButton: {
     opacity: 0.6,
   },
 
@@ -210,24 +226,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-  },
-
-  loginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-
-  loginText: {
-    fontSize: 15,
-    color: '#666666',
-  },
-
-  loginButton: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1d4ed8',
-    marginLeft: 5,
   },
 });
