@@ -13,12 +13,25 @@ import { Redirect, router } from 'expo-router';
 
 import { isValidSouthAfricanId } from '../../utils/saIdValidator';
 
+import { supabase } from '../../lib/supabase';
+
 import {
   CameraView,
   useCameraPermissions,
 } from 'expo-camera';
 
 import { useAuth } from '../../context/AuthContext';
+
+type Patient = {
+  id: string;
+  id_number: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string | null;
+  gender: string | null;
+  phone_number: string | null;
+  address: string | null;
+};
 
 export default function ScanIdScreen() {
   const { session } = useAuth();
@@ -33,6 +46,12 @@ export default function ScanIdScreen() {
 
   const [barcodeType, setBarcodeType] =
     useState<string | null>(null);
+
+  const [patient, setPatient] =
+  useState<Patient | null>(null);
+
+  const [searching, setSearching] =
+  useState(false);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -95,29 +114,28 @@ export default function ScanIdScreen() {
   /*
    * Barcode detected.
    */
-  const handleBarcodeScanned = ({
+const handleBarcodeScanned = async ({
   data,
   type,
 }: {
   data: string;
   type: string;
 }) => {
-  if (scanned) {
+  if (scanned || searching) {
     return;
   }
 
   console.log('BARCODE TYPE:', type);
   console.log('BARCODE DATA:', data);
 
-  // Find every sequence of exactly 13 digits
-  const possibleIds = data.match(/\d{13}/g) ?? [];
+  const possibleIds =
+    data.match(/\d{13}/g) ?? [];
 
   console.log(
     'POSSIBLE ID NUMBERS:',
     possibleIds
   );
 
-  // Find a valid South African ID number
   const validId = possibleIds.find(
     (candidate) =>
       isValidSouthAfricanId(candidate)
@@ -138,10 +156,79 @@ export default function ScanIdScreen() {
   );
 
   setScanned(true);
-
   setBarcodeData(validId);
-
   setBarcodeType(type);
+
+  try {
+    setSearching(true);
+
+    console.log(
+      'SEARCHING SUPABASE FOR:',
+      validId
+    );
+
+    const {
+      data: patientData,
+      error,
+    } = await supabase
+      .from('patients')
+      .select(
+        `
+        id,
+        id_number,
+        first_name,
+        last_name,
+        date_of_birth,
+        gender,
+        phone_number,
+        address
+        `
+      )
+      .eq('id_number', validId)
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        'PATIENT SEARCH ERROR:',
+        error.message
+      );
+
+      Alert.alert(
+        'Database error',
+        error.message
+      );
+
+      return;
+    }
+
+    if (!patientData) {
+      Alert.alert(
+        'Patient not found',
+        'The ID is valid, but there is no patient record associated with it.'
+      );
+
+      return;
+    }
+
+    console.log(
+      'PATIENT FOUND:',
+      patientData.id
+    );
+
+    setPatient(patientData);
+  } catch (error) {
+    console.error(
+      'PATIENT SEARCH EXCEPTION:',
+      error
+    );
+
+    Alert.alert(
+      'Error',
+      'Unable to retrieve the patient record.'
+    );
+  } finally {
+    setSearching(false);
+  }
 };
 
 const scanAgain = () => {
@@ -216,56 +303,128 @@ const scanAgain = () => {
    */
   return (
     <View style={styles.resultContainer}>
-      <Text style={styles.successTitle}>
-        Barcode Detected
-      </Text>
+    {searching ? (
+      <>
+        <ActivityIndicator
+          size="large"
+          color="#2563eb"
+        />
 
-      <Text style={styles.resultLabel}>
-        Barcode type
-      </Text>
-
-      <View style={styles.resultCard}>
-        <Text style={styles.resultText}>
-          {barcodeType}
+        <Text style={styles.searchingTitle}>
+          Finding Patient...
         </Text>
-      </View>
 
-      <Text style={styles.resultLabel}>
-        Barcode data
-      </Text>
-
-      <View style={styles.resultCard}>
-        <Text style={styles.resultText}>
-          {barcodeData}
+        <Text style={styles.note}>
+          Searching the MediVault database using
+          the validated ID number.
         </Text>
-      </View>
-
-      <Text style={styles.note}>
-        We have successfully received the barcode
-        data. The next step will extract and
-        validate the patient's South African ID
-        number before searching Supabase.
-      </Text>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={scanAgain}
-      >
-        <Text style={styles.buttonText}>
-          Scan Again
+      </>
+    ) : patient ? (
+      <>
+        <Text style={styles.successTitle}>
+          Patient Found
         </Text>
-      </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-        <Text style={styles.backButtonText}>
-          Back
+        <View style={styles.patientCard}>
+          <Text style={styles.patientName}>
+            {patient.first_name}{' '}
+            {patient.last_name}
+          </Text>
+
+          <Text style={styles.label}>
+            ID Number
+          </Text>
+
+          <Text style={styles.value}>
+            {patient.id_number}
+          </Text>
+
+          <Text style={styles.label}>
+            Date of Birth
+          </Text>
+
+          <Text style={styles.value}>
+            {patient.date_of_birth ??
+              'Not recorded'}
+          </Text>
+
+          <Text style={styles.label}>
+            Gender
+          </Text>
+
+          <Text style={styles.value}>
+            {patient.gender ??
+              'Not recorded'}
+          </Text>
+
+          <Text style={styles.label}>
+            Phone
+          </Text>
+
+          <Text style={styles.value}>
+            {patient.phone_number ??
+              'Not recorded'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => {
+            // Patient medical-record screen
+            // will be added next.
+            Alert.alert(
+              'Patient selected',
+              'The patient record has been successfully retrieved.'
+            );
+          }}
+        >
+          <Text style={styles.buttonText}>
+            Open Patient Record
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={scanAgain}
+        >
+          <Text style={styles.backButtonText}>
+            Scan Another Patient
+          </Text>
+        </TouchableOpacity>
+      </>
+    ) : (
+      <>
+        <Text style={styles.successTitle}>
+          ID Validated
         </Text>
-      </TouchableOpacity>
-    </View>
-  );
+
+        <Text style={styles.resultLabel}>
+          Patient ID
+        </Text>
+
+        <View style={styles.resultCard}>
+          <Text style={styles.resultText}>
+            {barcodeData}
+          </Text>
+        </View>
+
+        <Text style={styles.note}>
+          No patient record was found for this
+          ID number.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={scanAgain}
+        >
+          <Text style={styles.buttonText}>
+            Scan Again
+          </Text>
+        </TouchableOpacity>
+      </>
+    )}
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
@@ -450,4 +609,39 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginBottom: 28,
   },
+
+  searchingTitle: {
+  fontSize: 24,
+  fontWeight: '700',
+  color: '#0f172a',
+  marginTop: 20,
+  marginBottom: 10,
+},
+
+patientCard: {
+  backgroundColor: '#ffffff',
+  borderRadius: 14,
+  padding: 22,
+  marginBottom: 24,
+},
+
+patientName: {
+  fontSize: 23,
+  fontWeight: '700',
+  color: '#0f172a',
+  marginBottom: 15,
+},
+
+label: {
+  fontSize: 13,
+  color: '#64748b',
+  marginTop: 12,
+  marginBottom: 4,
+},
+
+value: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#0f172a',
+},
 });
