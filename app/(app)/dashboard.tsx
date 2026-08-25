@@ -10,6 +10,8 @@ import { Redirect } from 'expo-router';
 
 import { useAuth } from '../../context/AuthContext';
 
+import { router } from 'expo-router';
+
 export default function DashboardScreen() {
   const { session, signOut } = useAuth();
 
@@ -54,6 +56,15 @@ export default function DashboardScreen() {
           {session.user.email}
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.scanButton}
+        onPress={() => router.push('/(app)/scan-id')}
+      >
+        <Text style={styles.scanButtonText}>
+          Scan Patient ID
+        </Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.button}
@@ -121,4 +132,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
+  scanButton: {
+  height: 56,
+  borderRadius: 12,
+  backgroundColor: '#2563eb',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginTop: 20,
+},
+
+  scanButtonText: {
+  color: '#ffffff',
+  fontSize: 16,
+  fontWeight: '700',
+},
 });

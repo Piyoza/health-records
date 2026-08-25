@@ -2,6 +2,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Text,
+  Alert,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -9,6 +10,8 @@ import {
 import { useState } from 'react';
 
 import { Redirect, router } from 'expo-router';
+
+import { isValidSouthAfricanId } from '../../utils/saIdValidator';
 
 import {
   CameraView,
@@ -93,29 +96,59 @@ export default function ScanIdScreen() {
    * Barcode detected.
    */
   const handleBarcodeScanned = ({
-    data,
-    type,
-  }: {
-    data: string;
-    type: string;
-  }) => {
-    if (scanned) {
-      return;
-    }
+  data,
+  type,
+}: {
+  data: string;
+  type: string;
+}) => {
+  if (scanned) {
+    return;
+  }
 
-    console.log('BARCODE TYPE:', type);
-    console.log('BARCODE DATA:', data);
+  console.log('BARCODE TYPE:', type);
+  console.log('BARCODE DATA:', data);
 
-    setScanned(true);
-    setBarcodeData(data);
-    setBarcodeType(type);
-  };
+  // Find every sequence of exactly 13 digits
+  const possibleIds = data.match(/\d{13}/g) ?? [];
 
-  const scanAgain = () => {
-    setScanned(false);
-    setBarcodeData(null);
-    setBarcodeType(null);
-  };
+  console.log(
+    'POSSIBLE ID NUMBERS:',
+    possibleIds
+  );
+
+  // Find a valid South African ID number
+  const validId = possibleIds.find(
+    (candidate) =>
+      isValidSouthAfricanId(candidate)
+  );
+
+  if (!validId) {
+    Alert.alert(
+      'ID not recognised',
+      'The barcode was scanned, but we could not find a valid South African ID number.'
+    );
+
+    return;
+  }
+
+  console.log(
+    'VALID PATIENT ID:',
+    validId
+  );
+
+  setScanned(true);
+
+  setBarcodeData(validId);
+
+  setBarcodeType(type);
+};
+
+const scanAgain = () => {
+  setScanned(false);
+  setBarcodeData(null);
+  setBarcodeType(null);
+};
 
   /*
    * Scanner screen
