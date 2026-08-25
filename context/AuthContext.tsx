@@ -12,12 +12,19 @@ import { supabase } from '../lib/supabase';
 type AuthContextType = {
   session: Session | null;
   loading: boolean;
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
-  loading: false,
+  loading: true,
+
+  signIn: async () => {},
+
   signOut: async () => {},
 });
 
@@ -26,16 +33,21 @@ export function AuthProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [session, setSession] =
+    useState<Session | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadSession() {
       try {
-        const { data, error } =
-          await supabase.auth.getSession();
+        const {
+          data,
+          error,
+        } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
@@ -46,10 +58,14 @@ export function AuthProvider({
           );
 
           setSession(null);
-          return;
-        }
+        } else {
+          console.log(
+            'INITIAL SESSION:',
+            data.session
+          );
 
-        setSession(data.session);
+          setSession(data.session);
+        }
       } catch (error) {
         console.error(
           'AUTH SESSION ERROR:',
@@ -59,6 +75,10 @@ export function AuthProvider({
         if (mounted) {
           setSession(null);
         }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     }
 
@@ -67,10 +87,21 @@ export function AuthProvider({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
+      (event, newSession) => {
+        console.log(
+          'AUTH EVENT:',
+          event
+        );
+
+        console.log(
+          'AUTH SESSION:',
+          newSession
+        );
+
         if (!mounted) return;
 
         setSession(newSession);
+        setLoading(false);
       }
     );
 
@@ -80,15 +111,43 @@ export function AuthProvider({
     };
   }, []);
 
+  async function signIn(
+    email: string,
+    password: string
+  ) {
+    console.log('AUTH CONTEXT: signing in...');
+
+    const {
+      data,
+      error,
+    } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error(
+        'AUTH CONTEXT LOGIN ERROR:',
+        error.message
+      );
+
+      throw error;
+    }
+
+    console.log(
+      'AUTH CONTEXT LOGIN SUCCESS:',
+      data.user?.email
+    );
+
+    setSession(data.session);
+  }
+
   async function signOut() {
     const { error } =
       await supabase.auth.signOut();
 
     if (error) {
-      console.error(
-        'SIGN OUT ERROR:',
-        error.message
-      );
+      throw error;
     }
 
     setSession(null);
@@ -99,6 +158,7 @@ export function AuthProvider({
       value={{
         session,
         loading,
+        signIn,
         signOut,
       }}
     >

@@ -9,14 +9,17 @@ import {
 } from 'react-native';
 
 import { useState } from 'react';
-import { Link } from 'expo-router';
 
-import { supabase } from '../../lib/supabase';
+import { Link, router } from 'expo-router';
+
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { signIn } = useAuth();
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -30,46 +33,29 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      console.log('LOGIN: attempting...');
+      console.log('LOGIN SCREEN: attempting login');
 
-      const { data, error } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-      if (error) {
-        console.error(
-          'LOGIN ERROR:',
-          error.message
-        );
-
-        Alert.alert(
-          'Login failed',
-          error.message
-        );
-
-        return;
-      }
+      await signIn(
+        email.trim(),
+        password
+      );
 
       console.log(
-        'LOGIN SUCCESS:',
-        data.user?.id
+        'LOGIN SCREEN: authentication successful'
       );
 
-      Alert.alert(
-        'Login successful',
-        `Welcome back ${data.user?.email}`
-      );
-    } catch (error) {
+      router.replace('/(app)/dashboard');
+
+    } catch (error: any) {
       console.error(
-        'LOGIN EXCEPTION:',
+        'LOGIN SCREEN ERROR:',
         error
       );
 
       Alert.alert(
-        'Error',
-        'Something went wrong while logging in.'
+        'Login failed',
+        error?.message ||
+          'Unable to sign in.'
       );
     } finally {
       setLoading(false);
@@ -78,6 +64,7 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
+
       <Text style={styles.logo}>
         MediVault
       </Text>
@@ -119,18 +106,19 @@ export default function LoginScreen() {
         {loading ? (
           <ActivityIndicator color="#ffffff" />
         ) : (
-          <><Text style={styles.buttonText}>
-              Sign In
-            </Text>
-            <Link
-              href="/(auth)/register"
-              style={styles.registerLink}
-            >
-                Don't have an account? Register
-              </Link></>
-        
+          <Text style={styles.buttonText}>
+            Sign In
+          </Text>
         )}
       </TouchableOpacity>
+
+      <Link
+        href="/(auth)/register"
+        style={styles.registerLink}
+      >
+        Don't have an account? Register
+      </Link>
+
     </View>
   );
 }
