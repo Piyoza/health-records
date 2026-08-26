@@ -267,12 +267,21 @@ const scanAgain = () => {
             }
             barcodeScannerSettings={{
               barcodeTypes: [
-                'pdf417',
-                'code128',
-                'qr',
-                'datamatrix',
-              ],
-            }}
+    'pdf417',
+    'code128',
+    'code39',
+    'code93',
+    'ean13',
+    'ean8',
+    'upc_a',
+    'upc_e',
+    'itf14',
+    'codabar',
+    'qr',
+    'datamatrix',
+    'aztec',
+  ],
+}}
           />
 
           <View style={styles.overlay}>
