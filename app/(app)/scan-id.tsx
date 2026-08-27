@@ -33,6 +33,7 @@ type Patient = {
   address: string | null;
 };
 
+
 export default function ScanIdScreen() {
   const { session } = useAuth();
 
@@ -114,121 +115,23 @@ export default function ScanIdScreen() {
   /*
    * Barcode detected.
    */
-const handleBarcodeScanned = async ({
+const handleBarcodeScanned = ({
   data,
   type,
 }: {
   data: string;
   type: string;
 }) => {
-  if (scanned || searching) {
-    return;
-  }
+  console.log('==============================');
+  console.log('BARCODE DETECTED');
+  console.log('TYPE:', type);
+  console.log('DATA:', data);
+  console.log('==============================');
 
-  console.log('BARCODE TYPE:', type);
-  console.log('BARCODE DATA:', data);
-
-  const possibleIds =
-    data.match(/\d{13}/g) ?? [];
-
-  console.log(
-    'POSSIBLE ID NUMBERS:',
-    possibleIds
+  Alert.alert(
+    'Barcode Detected',
+    `Type: ${type}\n\nData received successfully.`
   );
-
-  const validId = possibleIds.find(
-    (candidate) =>
-      isValidSouthAfricanId(candidate)
-  );
-
-  if (!validId) {
-    Alert.alert(
-      'ID not recognised',
-      'The barcode was scanned, but we could not find a valid South African ID number.'
-    );
-
-    return;
-  }
-
-  console.log(
-    'VALID PATIENT ID:',
-    validId
-  );
-
-  setScanned(true);
-  setBarcodeData(validId);
-  setBarcodeType(type);
-
-  try {
-    setSearching(true);
-
-    console.log(
-      'SEARCHING SUPABASE FOR:',
-      validId
-    );
-
-    const {
-      data: patientData,
-      error,
-    } = await supabase
-      .from('patients')
-      .select(
-        `
-        id,
-        id_number,
-        first_name,
-        last_name,
-        date_of_birth,
-        gender,
-        phone_number,
-        address
-        `
-      )
-      .eq('id_number', validId)
-      .maybeSingle();
-
-    if (error) {
-      console.error(
-        'PATIENT SEARCH ERROR:',
-        error.message
-      );
-
-      Alert.alert(
-        'Database error',
-        error.message
-      );
-
-      return;
-    }
-
-    if (!patientData) {
-      Alert.alert(
-        'Patient not found',
-        'The ID is valid, but there is no patient record associated with it.'
-      );
-
-      return;
-    }
-
-    console.log(
-      'PATIENT FOUND:',
-      patientData.id
-    );
-
-    setPatient(patientData);
-  } catch (error) {
-    console.error(
-      'PATIENT SEARCH EXCEPTION:',
-      error
-    );
-
-    Alert.alert(
-      'Error',
-      'Unable to retrieve the patient record.'
-    );
-  } finally {
-    setSearching(false);
-  }
 };
 
 const scanAgain = () => {
@@ -266,21 +169,7 @@ const scanAgain = () => {
               handleBarcodeScanned
             }
             barcodeScannerSettings={{
-              barcodeTypes: [
-    'pdf417',
-    'code128',
-    'code39',
-    'code93',
-    'ean13',
-    'ean8',
-    'upc_a',
-    'upc_e',
-    'itf14',
-    'codabar',
-    'qr',
-    'datamatrix',
-    'aztec',
-  ],
+              barcodeTypes: ['pdf417'],
 }}
           />
 
