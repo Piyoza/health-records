@@ -115,23 +115,36 @@ export default function ScanIdScreen() {
   /*
    * Barcode detected.
    */
-const handleBarcodeScanned = ({
-  data,
-  type,
-}: {
-  data: string;
-  type: string;
-}) => {
-  console.log('==============================');
-  console.log('BARCODE DETECTED');
-  console.log('TYPE:', type);
-  console.log('DATA:', data);
-  console.log('==============================');
+const handleBarcodeScanned = async ({ data, type }: { data: string; type: string }) => {
+  if (scanned || searching) return;
 
-  Alert.alert(
-    'Barcode Detected',
-    `Type: ${type}\n\nData received successfully.`
-  );
+  console.log('SCANNED TYPE:', type);
+  console.log('RAW DATA:', JSON.stringify(data));
+
+  // SA Smart ID PDF417 payloads split fields using pipe '|' delimiters
+  // Standard format: SURNAME|FIRST_NAMES|GENDER|NATIONALITY|ID_NUMBER|DOB...
+  const fields = data.split('|');
+
+  // Fallback to regex if simple string splitting doesn't match
+  const extractedId = fields.find((field) => isValidSouthAfricanId(field.trim())) 
+    || data.match(/\d{13}/g)?.find((candidate) => isValidSouthAfricanId(candidate));
+
+  if (!extractedId) {
+    Alert.alert(
+      'ID Not Recognised',
+      'Scanned the card, but could not extract a valid 13-digit SA ID number.'
+    );
+    return;
+  }
+
+  // Extract metadata directly from the barcode fields if present
+  const surname = fields[0] || null;
+  const firstNames = fields[1] || null;
+  const gender = fields[2] || null;
+
+  console.log('Extracted Details:', { extractedId, surname, firstNames, gender });
+
+  // Continue with your database lookup...
 };
 
 const scanAgain = () => {
@@ -163,15 +176,15 @@ const scanAgain = () => {
 
         <View style={styles.cameraContainer}>
           <CameraView
-            style={styles.camera}
-            facing="back"
-            onBarcodeScanned={
-              handleBarcodeScanned
-            }
-            barcodeScannerSettings={{
-              barcodeTypes: ['pdf417'],
-}}
-          />
+  style={styles.camera}
+  facing="back"
+  enableTorch={false}
+  // Restrict barcodeTypes to ONLY pdf417 and code128 for faster, more accurate scanning
+  barcodeScannerSettings={{
+    barcodeTypes: ['pdf417', 'code128','code39'],
+  }}
+  onBarcodeScanned={handleBarcodeScanned}
+/>
 
           <View style={styles.overlay}>
             <View style={styles.scanFrame} />
