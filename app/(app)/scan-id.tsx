@@ -1,19 +1,15 @@
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
-  Alert,
   TouchableOpacity,
   View,
 } from 'react-native';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Redirect, router } from 'expo-router';
-
-import { isValidSouthAfricanId } from '../../utils/saIdValidator';
-
-import { supabase } from '../../lib/supabase';
 
 import {
   CameraView,
@@ -22,52 +18,25 @@ import {
 
 import { useAuth } from '../../context/AuthContext';
 
-type Patient = {
-  id: string;
-  id_number: string;
-  first_name: string;
-  last_name: string;
-  date_of_birth: string | null;
-  gender: string | null;
-  phone_number: string | null;
-  address: string | null;
-};
-
-
 export default function ScanIdScreen() {
   const { session } = useAuth();
 
   const [permission, requestPermission] =
     useCameraPermissions();
 
-  const [scanned, setScanned] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
 
-  const [barcodeData, setBarcodeData] =
-    useState<string | null>(null);
-
-  const [barcodeType, setBarcodeType] =
-    useState<string | null>(null);
-
-  const [patient, setPatient] =
-  useState<Patient | null>(null);
-
-  const [searching, setSearching] =
-  useState(false);
+  const [processing, setProcessing] =
+    useState(false);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
 
-  /*
-   * Camera permission is still being checked.
-   */
   if (!permission) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color="#2563eb"
-        />
+        <ActivityIndicator size="large" />
 
         <Text style={styles.loadingText}>
           Checking camera permission...
@@ -76,9 +45,6 @@ export default function ScanIdScreen() {
     );
   }
 
-  /*
-   * Camera permission hasn't been granted.
-   */
   if (!permission.granted) {
     return (
       <View style={styles.center}>
@@ -87,8 +53,8 @@ export default function ScanIdScreen() {
         </Text>
 
         <Text style={styles.description}>
-          MediVault needs camera access to scan
-          the patient's identification document.
+          Camera access is required to capture the
+          patient's identification card.
         </Text>
 
         <TouchableOpacity
@@ -99,243 +65,124 @@ export default function ScanIdScreen() {
             Allow Camera
           </Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>
-            Go Back
-          </Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
-  /*
-   * Barcode detected.
-   */
-const handleBarcodeScanned = async ({ data, type }: { data: string; type: string }) => {
-  if (scanned || searching) return;
+  const takePhoto = async () => {
+    if (!cameraRef.current || processing) {
+      return;
+    }
 
-  console.log('SCANNED TYPE:', type);
-  console.log('RAW DATA:', JSON.stringify(data));
+    try {
+      setProcessing(true);
 
-  // SA Smart ID PDF417 payloads split fields using pipe '|' delimiters
-  // Standard format: SURNAME|FIRST_NAMES|GENDER|NATIONALITY|ID_NUMBER|DOB...
-  const fields = data.split('|');
+      console.log(
+        'CAPTURING ID CARD...'
+      );
 
-  // Fallback to regex if simple string splitting doesn't match
-  const extractedId = fields.find((field) => isValidSouthAfricanId(field.trim())) 
-    || data.match(/\d{13}/g)?.find((candidate) => isValidSouthAfricanId(candidate));
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          quality: 1,
+          skipProcessing: false,
+        });
 
-  if (!extractedId) {
-    Alert.alert(
-      'ID Not Recognised',
-      'Scanned the card, but could not extract a valid 13-digit SA ID number.'
-    );
-    return;
-  }
+      if (!photo?.uri) {
+        throw new Error(
+          'The camera did not return an image.'
+        );
+      }
 
-  // Extract metadata directly from the barcode fields if present
-  const surname = fields[0] || null;
-  const firstNames = fields[1] || null;
-  const gender = fields[2] || null;
+      console.log(
+        'PHOTO CAPTURED:',
+        photo.uri
+      );
 
-  console.log('Extracted Details:', { extractedId, surname, firstNames, gender });
+      Alert.alert(
+        'Photo captured',
+        'The ID image was captured successfully.'
+      );
 
-  // Continue with your database lookup...
-};
+    } catch (error) {
+      console.error(
+        'CAPTURE ERROR:',
+        error
+      );
 
-const scanAgain = () => {
-  setScanned(false);
-  setBarcodeData(null);
-  setBarcodeType(null);
-};
+      Alert.alert(
+        'Camera error',
+        'Unable to capture the ID card.'
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
 
-  /*
-   * Scanner screen
-   */
-  if (!scanned) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.logo}>
-            MediVault
-          </Text>
+  return (
+    <View style={styles.container}>
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing="back"
+      />
 
-          <Text style={styles.headerTitle}>
+      <View style={styles.overlay}>
+        <View style={styles.topArea}>
+          <Text style={styles.heading}>
             Scan Patient ID
           </Text>
 
-          <Text style={styles.headerDescription}>
-            Position the barcode on the patient's
-            ID inside the scanning frame.
+          <Text style={styles.instruction}>
+            Place the entire ID card inside the
+            frame.
           </Text>
         </View>
 
-        <View style={styles.cameraContainer}>
-          <CameraView
-  style={styles.camera}
-  facing="back"
-  enableTorch={false}
-  // Restrict barcodeTypes to ONLY pdf417 and code128 for faster, more accurate scanning
-  barcodeScannerSettings={{
-    barcodeTypes: ['pdf417', 'code128','code39'],
-  }}
-  onBarcodeScanned={handleBarcodeScanned}
-/>
+        <View style={styles.cardFrame}>
+          <View style={styles.cornerTopLeft} />
+          <View style={styles.cornerTopRight} />
+          <View style={styles.cornerBottomLeft} />
+          <View style={styles.cornerBottomRight} />
+        </View>
 
-          <View style={styles.overlay}>
-            <View style={styles.scanFrame} />
-          </View>
+        <View style={styles.bottomArea}>
+          <Text style={styles.hint}>
+            Make sure the barcode is sharp and
+            well lit.
+          </Text>
 
-          <View style={styles.scanInstruction}>
-            <Text style={styles.instructionText}>
-              Align the ID barcode inside the box
+          <TouchableOpacity
+            style={[
+              styles.captureButton,
+              processing &&
+                styles.captureButtonDisabled,
+            ]}
+            onPress={takePhoto}
+            disabled={processing}
+          >
+            {processing ? (
+              <ActivityIndicator
+                color="#ffffff"
+              />
+            ) : (
+              <View
+                style={styles.captureCircle}
+              />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.cancelText}>
+              Cancel
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.cancelButtonText}>
-            Cancel
-          </Text>
-        </TouchableOpacity>
       </View>
-    );
-  }
-
-  /*
-   * Barcode result screen
-   */
-  return (
-    <View style={styles.resultContainer}>
-    {searching ? (
-      <>
-        <ActivityIndicator
-          size="large"
-          color="#2563eb"
-        />
-
-        <Text style={styles.searchingTitle}>
-          Finding Patient...
-        </Text>
-
-        <Text style={styles.note}>
-          Searching the MediVault database using
-          the validated ID number.
-        </Text>
-      </>
-    ) : patient ? (
-      <>
-        <Text style={styles.successTitle}>
-          Patient Found
-        </Text>
-
-        <View style={styles.patientCard}>
-          <Text style={styles.patientName}>
-            {patient.first_name}{' '}
-            {patient.last_name}
-          </Text>
-
-          <Text style={styles.label}>
-            ID Number
-          </Text>
-
-          <Text style={styles.value}>
-            {patient.id_number}
-          </Text>
-
-          <Text style={styles.label}>
-            Date of Birth
-          </Text>
-
-          <Text style={styles.value}>
-            {patient.date_of_birth ??
-              'Not recorded'}
-          </Text>
-
-          <Text style={styles.label}>
-            Gender
-          </Text>
-
-          <Text style={styles.value}>
-            {patient.gender ??
-              'Not recorded'}
-          </Text>
-
-          <Text style={styles.label}>
-            Phone
-          </Text>
-
-          <Text style={styles.value}>
-            {patient.phone_number ??
-              'Not recorded'}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => {
-            // Patient medical-record screen
-            // will be added next.
-            Alert.alert(
-              'Patient selected',
-              'The patient record has been successfully retrieved.'
-            );
-          }}
-        >
-          <Text style={styles.buttonText}>
-            Open Patient Record
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={scanAgain}
-        >
-          <Text style={styles.backButtonText}>
-            Scan Another Patient
-          </Text>
-        </TouchableOpacity>
-      </>
-    ) : (
-      <>
-        <Text style={styles.successTitle}>
-          ID Validated
-        </Text>
-
-        <Text style={styles.resultLabel}>
-          Patient ID
-        </Text>
-
-        <View style={styles.resultCard}>
-          <Text style={styles.resultText}>
-            {barcodeData}
-          </Text>
-        </View>
-
-        <Text style={styles.note}>
-          No patient record was found for this
-          ID number.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={scanAgain}
-        >
-          <Text style={styles.buttonText}>
-            Scan Again
-          </Text>
-        </TouchableOpacity>
-      </>
-    )}
-  </View>
-);
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -344,79 +191,126 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
 
-  header: {
-    paddingTop: 55,
-    paddingHorizontal: 22,
-    paddingBottom: 18,
-    backgroundColor: '#f8fafc',
-  },
-
-  logo: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#2563eb',
-    marginBottom: 5,
-  },
-
-  headerTitle: {
-    fontSize: 25,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 7,
-  },
-
-  headerDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#64748b',
-  },
-
-  cameraContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-
   camera: {
     flex: 1,
   },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+  },
+
+  topArea: {
+    paddingTop: 60,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+
+  heading: {
+    color: '#ffffff',
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+
+  instruction: {
+    color: '#ffffff',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  cardFrame: {
+    width: '88%',
+    height: 240,
+    alignSelf: 'center',
+    position: 'relative',
+  },
+
+  cornerTopLeft: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#ffffff',
+  },
+
+  cornerTopRight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 35,
+    height: 35,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#ffffff',
+  },
+
+  cornerBottomLeft: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: '#ffffff',
+  },
+
+  cornerBottomRight: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 35,
+    height: 35,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: '#ffffff',
+  },
+
+  bottomArea: {
+    paddingBottom: 30,
+    alignItems: 'center',
+  },
+
+  hint: {
+    color: '#ffffff',
+    fontSize: 13,
+    marginBottom: 18,
+    textAlign: 'center',
+  },
+
+  captureButton: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 5,
+    borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  scanFrame: {
-    width: '82%',
-    height: 180,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    borderRadius: 14,
+  captureButtonDisabled: {
+    opacity: 0.6,
   },
 
-  scanInstruction: {
-    position: 'absolute',
-    bottom: 35,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-
-  instructionText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
+  captureCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#ffffff',
   },
 
   cancelButton: {
-    height: 58,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginTop: 20,
+    paddingHorizontal: 30,
+    paddingVertical: 10,
   },
 
-  cancelButtonText: {
-    color: '#dc2626',
+  cancelText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -425,7 +319,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 25,
     backgroundColor: '#f8fafc',
   },
 
@@ -433,8 +327,8 @@ const styles = StyleSheet.create({
     fontSize: 25,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 12,
     textAlign: 'center',
+    marginBottom: 12,
   },
 
   description: {
@@ -457,102 +351,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
 
   buttonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-
-  backButton: {
-    width: '100%',
-    height: 54,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  backButtonText: {
-    color: '#334155',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  resultContainer: {
-    flex: 1,
-    padding: 24,
-    paddingTop: 70,
-    backgroundColor: '#f8fafc',
-  },
-
-  successTitle: {
-    fontSize: 27,
     fontWeight: '700',
-    color: '#16a34a',
-    marginBottom: 28,
   },
-
-  resultLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    marginBottom: 7,
-  },
-
-  resultCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 18,
-    marginBottom: 18,
-  },
-
-  resultText: {
-    fontSize: 16,
-    color: '#0f172a',
-  },
-
-  note: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#64748b',
-    marginBottom: 28,
-  },
-
-  searchingTitle: {
-  fontSize: 24,
-  fontWeight: '700',
-  color: '#0f172a',
-  marginTop: 20,
-  marginBottom: 10,
-},
-
-patientCard: {
-  backgroundColor: '#ffffff',
-  borderRadius: 14,
-  padding: 22,
-  marginBottom: 24,
-},
-
-patientName: {
-  fontSize: 23,
-  fontWeight: '700',
-  color: '#0f172a',
-  marginBottom: 15,
-},
-
-label: {
-  fontSize: 13,
-  color: '#64748b',
-  marginTop: 12,
-  marginBottom: 4,
-},
-
-value: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: '#0f172a',
-},
 });
