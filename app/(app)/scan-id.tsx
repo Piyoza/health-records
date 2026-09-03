@@ -14,7 +14,10 @@ import { Redirect, router } from 'expo-router';
 import {
   CameraView,
   useCameraPermissions,
+  Camera,
 } from 'expo-camera';
+
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useAuth } from '../../context/AuthContext';
 
@@ -69,54 +72,127 @@ export default function ScanIdScreen() {
     );
   }
 
-  const takePhoto = async () => {
-    if (!cameraRef.current || processing) {
+const takePhoto = async () => {
+  if (!cameraRef.current || processing) {
+    return;
+  }
+
+  try {
+    setProcessing(true);
+
+    console.log('CAPTURING ID CARD...');
+
+    const photo =
+      await cameraRef.current.takePictureAsync({
+        quality: 1,
+        skipProcessing: false,
+      });
+
+    if (!photo?.uri) {
+      throw new Error(
+        'The camera did not return an image.'
+      );
+    }
+
+    console.log(
+      'PHOTO CAPTURED:',
+      photo.uri
+    );
+
+    /*
+     * Resize the image first.
+     * This gives the barcode scanner a
+     * manageable high-quality image.
+     */
+    const manipulated =
+      await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [
+          {
+            resize: {
+              width: 1600,
+            },
+          },
+        ],
+        {
+          compress: 1,
+          format:
+            ImageManipulator.SaveFormat.JPEG,
+        }
+      );
+
+    console.log(
+      'IMAGE PROCESSED:',
+      manipulated.uri
+    );
+
+    /*
+     * Scan the captured image.
+     */
+    const results =
+      await Camera.scanFromURLAsync(
+        manipulated.uri,
+        [
+          'code39',
+          'pdf417',
+          'code128',
+        ]
+      );
+
+    console.log(
+      '================================'
+    );
+
+    console.log(
+      'BARCODE SCAN RESULTS:'
+    );
+
+    console.log(results);
+
+    console.log(
+      '================================'
+    );
+
+    if (!results || results.length === 0) {
+      Alert.alert(
+        'No barcode detected',
+        'The ID barcode could not be detected. Make sure the barcode is clearly visible, then try again.'
+      );
+
       return;
     }
 
-    try {
-      setProcessing(true);
+    const firstResult = results[0];
 
-      console.log(
-        'CAPTURING ID CARD...'
-      );
+    console.log(
+      'BARCODE TYPE:',
+      firstResult.type
+    );
 
-      const photo =
-        await cameraRef.current.takePictureAsync({
-          quality: 1,
-          skipProcessing: false,
-        });
+    console.log(
+      'BARCODE DATA LENGTH:',
+      firstResult.data.length
+    );
 
-      if (!photo?.uri) {
-        throw new Error(
-          'The camera did not return an image.'
-        );
-      }
+    Alert.alert(
+      'Barcode detected',
+      `Type: ${firstResult.type}\n\nData length: ${firstResult.data.length}`
+    );
 
-      console.log(
-        'PHOTO CAPTURED:',
-        photo.uri
-      );
+  } catch (error) {
+    console.error(
+      'ID SCAN ERROR:',
+      error
+    );
 
-      Alert.alert(
-        'Photo captured',
-        'The ID image was captured successfully.'
-      );
-
-    } catch (error) {
-      console.error(
-        'CAPTURE ERROR:',
-        error
-      );
-
-      Alert.alert(
-        'Camera error',
-        'Unable to capture the ID card.'
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
+    Alert.alert(
+      'Scan error',
+      'Something went wrong while scanning the ID image.'
+    );
+  } finally {
+    setProcessing(false);
+  }
+};
 
   return (
     <View style={styles.container}>
