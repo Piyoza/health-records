@@ -1,22 +1,28 @@
-
 import { useEffect, useState } from 'react';
-
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { supabase } from '../../lib/supabase';
 
 export default function DashboardScreen() {
   const [userEmail, setUserEmail] = useState('');
+  const [userRole, setUserRole] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Sidebar starts open
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const [patientId, setPatientId] = useState('');
 
   useEffect(() => {
     loadUser();
@@ -29,6 +35,7 @@ export default function DashboardScreen() {
       } = await supabase.auth.getUser();
 
       setUserEmail(user?.email ?? '');
+      setUserRole(user?.user_metadata?.role ?? 'Healthcare Worker');
     } catch (error) {
       console.error('DASHBOARD USER ERROR:', error);
     } finally {
@@ -37,24 +44,12 @@ export default function DashboardScreen() {
   };
 
   const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error('SIGN OUT ERROR:', error.message);
-        return;
-      }
-
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('SIGN OUT ERROR:', error);
-    }
+    await supabase.auth.signOut();
+    router.replace('/(auth)/login');
   };
 
   const getFirstName = () => {
-    if (!userEmail) {
-      return 'there';
-    }
+    if (!userEmail) return 'User';
 
     return userEmail
       .split('@')[0]
@@ -62,614 +57,750 @@ export default function DashboardScreen() {
       .replace(/^\w/, (c) => c.toUpperCase());
   };
 
+  const getRoleDisplay = () => {
+    if (!userRole) return 'Healthcare Worker';
+
+    const roleMap: Record<string, string> = {
+      admin: 'Admin',
+      administrator: 'Admin',
+      doctor: 'Doctor',
+      nurse: 'Nurse',
+      paramedic: 'Paramedic',
+      'healthcare worker': 'Healthcare Worker',
+    };
+
+    return roleMap[userRole.trim().toLowerCase()] ?? userRole;
+  };
+
+  const handlePatientSearch = () => {
+    if (!patientId.trim()) {
+      router.push('/(app)/patients');
+      return;
+    }
+
+    // You can later replace this with:
+    // router.push(`/(app)/patients/${patientId}`)
+    router.push('/(app)/patients');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color="#123B78" />
       </View>
     );
   }
 
   return (
     <View style={styles.appContainer}>
-      {/* SIDEBAR */}
-      <View style={styles.sidebar}>
-        <View>
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <View style={styles.logoIcon}>
-              <Text style={styles.logoIconText}>+</Text>
-            </View>
 
-            <View>
-              <Text style={styles.logoText}>CARELINK</Text>
-              <Text style={styles.logoSubtitle}>
-                Health System
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+
+      {sidebarOpen && (
+        <View style={styles.sidebar}>
+
+          {/* SIDEBAR LOGO */}
+          <View style={styles.sidebarBrand}>
+
+            <Image
+              source={require('../../assets/sa-government-logo.png')}
+              style={styles.governmentLogo}
+              resizeMode="contain"
+            />
+
+            <View style={styles.brandTextContainer}>
+              <Text style={styles.carelinkText}>CARELINK</Text>
+              <Text style={styles.brandSubtitle}>
+                Electronic Health Records
               </Text>
             </View>
+
           </View>
 
-          {/* Navigation */}
-          <View style={styles.navigation}>
-            <Text style={styles.navigationLabel}>
-              MAIN MENU
-            </Text>
+          <View style={styles.sidebarDivider} />
 
-            <Pressable
-              style={[
-                styles.navItem,
-                styles.activeNavItem,
-              ]}
-            >
-              <Text style={styles.navIcon}>⌂</Text>
+          {/* MAIN MENU */}
+          <View style={styles.menuSection}>
 
-              <Text style={styles.activeNavText}>
-                Dashboard
-              </Text>
-            </Pressable>
+            <Text style={styles.menuLabel}>MAIN MENU</Text>
 
-            <Pressable
-              style={styles.navItem}
-              onPress={() =>
-                router.push('/(app)/patients')
-              }
-            >
-              <Text style={styles.navIcon}>♙</Text>
+            <SidebarItem
+              icon="grid-outline"
+              label="Dashboard"
+              active
+              onPress={() => {}}
+            />
 
-              <Text style={styles.navText}>
-                Patients
-              </Text>
-            </Pressable>
+            <SidebarItem
+              icon="people-outline"
+              label="Patients"
+              onPress={() => router.push('/(app)/patients')}
+            />
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>▤</Text>
+            <SidebarItem
+              icon="document-text-outline"
+              label="Medical Records"
+              onPress={() => {}}
+            />
 
-              <Text style={styles.navText}>
-                Medical Records
-              </Text>
-            </Pressable>
+            <SidebarItem
+              icon="calendar-outline"
+              label="Appointments"
+              onPress={() => {}}
+            />
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>□</Text>
-
-              <Text style={styles.navText}>
-                Appointments
-              </Text>
-            </Pressable>
-
-            <Text
-              style={[
-                styles.navigationLabel,
-                styles.secondLabel,
-              ]}
-            >
+            <Text style={[styles.menuLabel, styles.servicesLabel]}>
               SERVICES
             </Text>
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.emergencyIcon}>!</Text>
+            <SidebarItem
+              icon="warning-outline"
+              label="Emergency"
+              emergency
+              onPress={() => {}}
+            />
 
-              <Text style={styles.navText}>
-                Emergency
-              </Text>
-            </Pressable>
+          </View>
+
+          {/* SIDEBAR BOTTOM */}
+          <View style={styles.sidebarBottom}>
+
+            <SidebarItem
+              icon="person-outline"
+              label="Profile"
+              onPress={() => router.push('/(app)/profile')}
+            />
+
+            <SidebarItem
+              icon="log-out-outline"
+              label="Sign Out"
+              onPress={handleSignOut}
+            />
+
           </View>
         </View>
+      )}
 
-        {/* Bottom navigation */}
-        <View>
-          <Pressable
-            style={styles.navItem}
-            onPress={() =>
-              router.push('/(app)/profile')
-            }
-          >
-            <Text style={styles.navIcon}>○</Text>
+      {/* =====================================================
+          MAIN AREA
+      ===================================================== */}
 
-            <Text style={styles.navText}>
-              Profile
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.navItem}
-            onPress={handleSignOut}
-          >
-            <Text style={styles.navIcon}>↪</Text>
-
-            <Text style={styles.navText}>
-              Sign Out
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* MAIN CONTENT */}
       <View style={styles.main}>
-        {/* HEADER */}
+
+        {/* =====================================================
+            TOP HEADER
+        ===================================================== */}
+
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>
-              CARELINK
-            </Text>
 
-            <Text style={styles.headerSubtitle}>
-              Electronic Health Records
-            </Text>
-          </View>
+          {/* LEFT HEADER */}
+          <View style={styles.headerLeft}>
 
-          <View style={styles.headerRight}>
+            {/* HAMBURGER */}
             <Pressable
-              style={styles.notificationButton}
+              style={styles.menuButton}
+              onPress={() => setSidebarOpen(!sidebarOpen)}
             >
-              <Text style={styles.notificationIcon}>
-                ♧
-              </Text>
-
-              <View style={styles.notificationDot} />
+              <Ionicons
+                name="menu-outline"
+                size={28}
+                color="#123B78"
+              />
             </Pressable>
 
-            <View style={styles.profileMini}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {getFirstName().charAt(0)}
+            {/* LOGO WHEN SIDEBAR IS CLOSED */}
+            {!sidebarOpen && (
+              <View style={styles.compactBrand}>
+
+                <Image
+                  source={require('../../assets/sa-government-logo.png')}
+                  style={styles.compactGovernmentLogo}
+                  resizeMode="contain"
+                />
+
+                <View>
+                  <Text style={styles.compactCarelink}>
+                    CARELINK
+                  </Text>
+
+                  <Text style={styles.compactSubtitle}>
+                    Electronic Health Records
+                  </Text>
+                </View>
+
+              </View>
+            )}
+
+          </View>
+
+          {/* RIGHT HEADER */}
+          <View style={styles.headerRight}>
+
+            {/* FACILITY */}
+            <View style={styles.facilityContainer}>
+              <Text style={styles.facilityLabel}>
+                Facility:
+              </Text>
+
+              <Text style={styles.facilityName}>
+                Durban Central Clinic
+              </Text>
+
+              <Ionicons
+                name="chevron-down"
+                size={15}
+                color="#172B4D"
+              />
+            </View>
+
+            {/* NOTIFICATIONS */}
+            <Pressable style={styles.notificationButton}>
+              <Ionicons
+                name="notifications-outline"
+                size={25}
+                color="#123B78"
+              />
+
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  3
                 </Text>
               </View>
+            </Pressable>
 
-              <View>
-                <Text style={styles.profileName}>
+            {/* USER */}
+            <View style={styles.userContainer}>
+
+              <View style={styles.userAvatar}>
+                <Ionicons
+                  name="person"
+                  size={20}
+                  color="#123B78"
+                />
+              </View>
+
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>
                   {getFirstName()}
                 </Text>
 
-                <Text style={styles.profileRole}>
-                  Healthcare Worker
+                <Text style={styles.userRole}>
+                  {getRoleDisplay()}
                 </Text>
               </View>
 
-              <Text style={styles.chevron}>
-                ⌄
-              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={15}
+                color="#172B4D"
+              />
+
             </View>
+
           </View>
         </View>
+
+        {/* =====================================================
+            CONTENT
+        ===================================================== */}
 
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* WELCOME */}
-          <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>
-              Good morning, {getFirstName()} 👋
+
+          {/* PAGE TITLE */}
+          <View style={styles.pageHeader}>
+
+            <Text style={styles.pageTitle}>
+              Dashboard
             </Text>
 
-            <Text style={styles.welcomeSubtitle}>
-              Here's what's happening with your patients today.
+            <Text style={styles.dateText}>
+              Date: 03 September 2026 | Time: 11:25
             </Text>
+
           </View>
 
-          {/* STATISTICS */}
-          <View style={styles.statsGrid}>
-            <StatCard
-              icon="♙"
-              number="128"
-              label="Total Patients"
-              detail="+8 today"
-              iconBackground="#EFF6FF"
-              iconColor="#2563EB"
-            />
+          {/* INFORMATION BANNER */}
+          <View style={styles.infoBanner}>
 
-            <StatCard
-              icon="□"
-              number="12"
-              label="Today's Appointments"
-              detail="4 upcoming"
-              iconBackground="#ECFDF5"
-              iconColor="#0F766E"
-            />
-
-            <StatCard
-              icon="▤"
-              number="08"
-              label="Pending Records"
-              detail="Needs attention"
-              iconBackground="#FFF7ED"
-              iconColor="#EA580C"
-            />
-
-            <StatCard
-              icon="!"
-              number="03"
-              label="Emergency Alerts"
-              detail="View alerts →"
-              iconBackground="#FEF2F2"
-              iconColor="#DC2626"
-              emergency
-            />
-          </View>
-
-          {/* QUICK ACTIONS */}
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>
-                Quick Actions
-              </Text>
-
-              <Text style={styles.sectionSubtitle}>
-                Common tasks at your fingertips
-              </Text>
+            <View style={styles.infoIcon}>
+              <Ionicons
+                name="information"
+                size={17}
+                color="#123B78"
+              />
             </View>
+
+            <Text style={styles.infoText}>
+              Patient clinical records are accessible in all public health facilities.
+            </Text>
+
           </View>
 
-          <View style={styles.quickActions}>
-            <ActionCard
-              icon="⌕"
-              title="Find Patient"
-              description="Search by ID or name"
-              onPress={() =>
-                router.push('/(app)/patients')
-              }
-            />
+          {/* =================================================
+              FIND PATIENT RECORD
+          ================================================= */}
 
-            <ActionCard
-              icon="♧"
-              title="Emergency Patient"
-              description="Identify a patient quickly"
-              emergency
-            />
+          <View style={styles.findPatientCard}>
 
-            <ActionCard
-              icon="+"
-              title="Add Medical Record"
-              description="Create a new patient record"
-            />
-          </View>
+            <Text style={styles.findPatientTitle}>
+              FIND PATIENT RECORD
+            </Text>
 
-          {/* LOWER CONTENT */}
-          <View style={styles.lowerGrid}>
-            {/* RECENT PATIENTS */}
-            <View style={styles.largeCard}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>
-                    Recent Patients
-                  </Text>
+            <Text style={styles.findPatientSubtitle}>
+              Search for a patient using South African ID number or biometric verification.
+            </Text>
 
-                  <Text style={styles.cardSubtitle}>
-                    Recently accessed records
-                  </Text>
+            <View style={styles.searchArea}>
+
+              {/* ID SEARCH */}
+              <View style={styles.idSearchSection}>
+
+                <Text style={styles.searchLabel}>
+                  Search by ID Number
+                </Text>
+
+                <View style={styles.searchRow}>
+
+                  <View style={styles.inputContainer}>
+
+                    <Ionicons
+                      name="person-outline"
+                      size={20}
+                      color="#94A3B8"
+                    />
+
+                    <TextInput
+                      value={patientId}
+                      onChangeText={setPatientId}
+                      placeholder="Enter South African ID Number"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.patientInput}
+                      keyboardType="numeric"
+                    />
+
+                  </View>
+
+                  <Pressable
+                    style={styles.searchButton}
+                    onPress={handlePatientSearch}
+                  >
+                    <Text style={styles.searchButtonText}>
+                      Search
+                    </Text>
+                  </Pressable>
+
                 </View>
 
-                <Pressable
-                  onPress={() =>
-                    router.push('/(app)/patients')
-                  }
-                >
-                  <Text style={styles.viewAll}>
-                    View all →
-                  </Text>
-                </Pressable>
+                <Text style={styles.exampleText}>
+                  Example: 8801011234088
+                </Text>
+
               </View>
 
-              <PatientRow
-                initials="JD"
+              {/* OR */}
+              <View style={styles.orContainer}>
+
+                <View style={styles.orLine} />
+
+                <Text style={styles.orText}>
+                  OR
+                </Text>
+
+                <View style={styles.orLine} />
+
+              </View>
+
+              {/* BIOMETRIC */}
+              <View style={styles.biometricSection}>
+
+                <Text style={styles.searchLabel}>
+                  Search by Biometric
+                </Text>
+
+                <View style={styles.biometricRow}>
+
+                  <View style={styles.fingerprintIconBox}>
+                    <Ionicons
+                      name="finger-print-outline"
+                      size={46}
+                      color="#123B78"
+                    />
+                  </View>
+
+                  <Pressable style={styles.scanButton}>
+
+                    <Text style={styles.scanButtonText}>
+                      Scan Fingerprint
+                    </Text>
+
+                  </Pressable>
+
+                </View>
+
+                <Text style={styles.fingerprintHelp}>
+                  Place finger on the scanner
+                </Text>
+
+              </View>
+
+            </View>
+
+          </View>
+
+          {/* =================================================
+              LOWER AREA
+          ================================================= */}
+
+          <View style={styles.lowerSection}>
+
+            {/* RECENTLY ACCESSED */}
+            <View style={styles.recentCard}>
+
+              <Text style={styles.cardSectionTitle}>
+                RECENTLY ACCESSED PATIENTS
+              </Text>
+
+              {/* TABLE HEADER */}
+              <View style={styles.tableHeader}>
+
+                <Text style={[styles.tableHeaderText, styles.patientIdColumn]}>
+                  Patient ID
+                </Text>
+
+                <Text style={[styles.tableHeaderText, styles.patientNameColumn]}>
+                  Patient Name
+                </Text>
+
+                <Text style={[styles.tableHeaderText, styles.recordColumn]}>
+                  Record Type
+                </Text>
+
+                <Text style={[styles.tableHeaderText, styles.accessedColumn]}>
+                  Accessed By
+                </Text>
+
+                <Text style={[styles.tableHeaderText, styles.facilityColumn]}>
+                  Facility
+                </Text>
+
+                <Text style={[styles.tableHeaderText, styles.timeColumn]}>
+                  Time
+                </Text>
+
+              </View>
+
+              <RecentPatient
+                id="CL-0001"
                 name="John Doe"
-                patientId="CL-0001"
-                time="Today, 10:42"
+                recordType="Consultation"
+                accessedBy="Dr. Naidoo"
+                facility="Durban Central Clinic"
+                time="11:20"
               />
 
-              <PatientRow
-                initials="SM"
+              <RecentPatient
+                id="CL-0002"
                 name="Sarah Mokoena"
-                patientId="CL-0002"
-                time="Today, 09:31"
+                recordType="Lab Result"
+                accessedBy="Dr. Patel"
+                facility="Wentworth Clinic"
+                time="10:45"
               />
 
-              <PatientRow
-                initials="TN"
-                name="Thabo Nkosi"
-                patientId="CL-0003"
-                time="Today, 08:54"
+              <RecentPatient
+                id="CL-0003"
+                name="Thabo Khumalo"
+                recordType="Radiology"
+                accessedBy="Dr. Naidoo"
+                facility="Durban Central Clinic"
+                time="10:15"
               />
 
-              <PatientRow
-                initials="ND"
+              <RecentPatient
+                id="CL-0004"
                 name="Nomsa Dlamini"
-                patientId="CL-0004"
-                time="Yesterday"
-              />
-            </View>
-
-            {/* SCHEDULE */}
-            <View style={styles.scheduleCard}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>
-                    Today's Schedule
-                  </Text>
-
-                  <Text style={styles.cardSubtitle}>
-                    Your upcoming appointments
-                  </Text>
-                </View>
-              </View>
-
-              <Appointment
-                time="09:00"
-                name="John Doe"
-                type="General Consultation"
+                recordType="Consultation"
+                accessedBy="Dr. Patel"
+                facility="Umlazi Clinic"
+                time="09:50"
               />
 
-              <Appointment
-                time="11:30"
-                name="Sarah Mokoena"
-                type="Follow-up"
-              />
-
-              <Appointment
-                time="14:00"
-                name="Thabo Nkosi"
-                type="Medical Review"
+              <RecentPatient
+                id="CL-0005"
+                name="Sipho Zulu"
+                recordType="Discharge Summary"
+                accessedBy="Dr. Naidoo"
+                facility="King Edward Hospital"
+                time="09:30"
               />
 
               <Pressable
-                style={styles.scheduleButton}
+                style={styles.viewAllButton}
+                onPress={() => router.push('/(app)/patients')}
               >
-                <Text style={styles.scheduleButtonText}>
-                  View Schedule →
+                <Text style={styles.viewAllText}>
+                  View all records
                 </Text>
               </Pressable>
+
             </View>
+
+            {/* SYSTEM STATUS */}
+            <View style={styles.statusCard}>
+
+              <Text style={styles.cardSectionTitle}>
+                SYSTEM STATUS
+              </Text>
+
+              <SystemStatus
+                icon="globe-outline"
+                title="National EHR Network"
+                status="Connected"
+              />
+
+              <SystemStatus
+                icon="share-social-outline"
+                title="Record Sharing"
+                status="Operational"
+              />
+
+              <SystemStatus
+                icon="finger-print-outline"
+                title="Biometric Service"
+                status="Operational"
+              />
+
+              <SystemStatus
+                icon="server-outline"
+                title="System"
+                status="Operational"
+              />
+
+            </View>
+
           </View>
 
-          {/* EMERGENCY BANNER */}
-          <View style={styles.emergencyBanner}>
-            <View style={styles.emergencyBannerIcon}>
-              <Text style={styles.emergencyBannerIconText}>
-                !
-              </Text>
-            </View>
-
-            <View style={styles.emergencyContent}>
-              <Text style={styles.emergencyTitle}>
-                Emergency Patient Identification
-              </Text>
-
-              <Text style={styles.emergencyDescription}>
-                Unable to identify a patient? Quickly locate their
-                medical record and access critical information.
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.emergencyButton}
-            >
-              <Text style={styles.emergencyButtonText}>
-                Identify Patient
-              </Text>
-            </Pressable>
-          </View>
+          {/* =================================================
+              FOOTER
+          ================================================= */}
 
           <View style={styles.footer}>
+
             <Text style={styles.footerText}>
-              CARELINK • Secure Electronic Health Records
+              Carelink Electronic Health Records System
             </Text>
+
+            <Text style={styles.footerDivider}>
+              |
+            </Text>
+
+            <Text style={styles.footerText}>
+              Department of Health – Republic of South Africa
+            </Text>
+
+            <View style={styles.footerRight}>
+
+              <Text style={styles.footerLink}>
+                Help Centre
+              </Text>
+
+              <Text style={styles.footerDivider}>
+                |
+              </Text>
+
+              <Text style={styles.footerLink}>
+                Privacy Policy
+              </Text>
+
+              <Text style={styles.footerDivider}>
+                |
+              </Text>
+
+              <Text style={styles.footerLink}>
+                Terms of Use
+              </Text>
+
+            </View>
+
           </View>
+
         </ScrollView>
+
       </View>
     </View>
   );
 }
 
-/* =========================
-   STAT CARD
-========================= */
 
-function StatCard({
+/* ============================================================
+   SIDEBAR ITEM
+============================================================ */
+
+function SidebarItem({
   icon,
-  number,
   label,
-  detail,
-  iconBackground,
-  iconColor,
+  active = false,
   emergency = false,
-}: {
-  icon: string;
-  number: string;
-  label: string;
-  detail: string;
-  iconBackground: string;
-  iconColor: string;
-  emergency?: boolean;
-}) {
-  return (
-    <View
-      style={[
-        styles.statCard,
-        emergency && styles.emergencyStatCard,
-      ]}
-    >
-      <View
-        style={[
-          styles.statIcon,
-          { backgroundColor: iconBackground },
-        ]}
-      >
-        <Text
-          style={[
-            styles.statIconText,
-            { color: iconColor },
-          ]}
-        >
-          {icon}
-        </Text>
-      </View>
-
-      <Text style={styles.statNumber}>
-        {number}
-      </Text>
-
-      <Text style={styles.statLabel}>
-        {label}
-      </Text>
-
-      <Text
-        style={[
-          styles.statDetail,
-          { color: iconColor },
-        ]}
-      >
-        {detail}
-      </Text>
-    </View>
-  );
-}
-
-/* =========================
-   ACTION CARD
-========================= */
-
-function ActionCard({
-  icon,
-  title,
-  description,
   onPress,
-  emergency = false,
 }: {
-  icon: string;
-  title: string;
-  description: string;
-  onPress?: () => void;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  active?: boolean;
   emergency?: boolean;
+  onPress?: () => void;
 }) {
   return (
     <Pressable
-      style={[
-        styles.actionCard,
-        emergency && styles.emergencyActionCard,
-      ]}
       onPress={onPress}
+      style={[
+        styles.sidebarItem,
+        active && styles.sidebarItemActive,
+      ]}
     >
-      <View
+
+      <Ionicons
+        name={icon}
+        size={20}
+        color={
+          active
+            ? '#FFFFFF'
+            : emergency
+            ? '#DC2626'
+            : '#64748B'
+        }
+      />
+
+      <Text
         style={[
-          styles.actionIcon,
-          emergency && styles.emergencyActionIcon,
+          styles.sidebarItemText,
+          active && styles.sidebarItemTextActive,
+          emergency && styles.sidebarEmergencyText,
         ]}
       >
-        <Text
-          style={[
-            styles.actionIconText,
-            emergency &&
-              styles.emergencyActionIconText,
-          ]}
-        >
-          {icon}
-        </Text>
-      </View>
-
-      <View style={styles.actionTextContainer}>
-        <Text style={styles.actionTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.actionDescription}>
-          {description}
-        </Text>
-      </View>
-
-      <Text style={styles.actionArrow}>
-        →
+        {label}
       </Text>
+
     </Pressable>
   );
 }
 
-/* =========================
-   PATIENT ROW
-========================= */
 
-function PatientRow({
-  initials,
+/* ============================================================
+   RECENT PATIENT
+============================================================ */
+
+function RecentPatient({
+  id,
   name,
-  patientId,
+  recordType,
+  accessedBy,
+  facility,
   time,
 }: {
-  initials: string;
+  id: string;
   name: string;
-  patientId: string;
+  recordType: string;
+  accessedBy: string;
+  facility: string;
   time: string;
 }) {
   return (
-    <Pressable style={styles.patientRow}>
-      <View style={styles.patientAvatar}>
-        <Text style={styles.patientAvatarText}>
-          {initials}
-        </Text>
-      </View>
+    <Pressable style={styles.patientTableRow}>
 
-      <View style={styles.patientInfo}>
-        <Text style={styles.patientName}>
-          {name}
-        </Text>
+      <Text style={[styles.tableText, styles.patientIdColumn]}>
+        {id}
+      </Text>
 
-        <Text style={styles.patientId}>
-          {patientId}
-        </Text>
-      </View>
+      <Text style={[styles.tableText, styles.patientNameColumn]}>
+        {name}
+      </Text>
 
-      <View style={styles.patientTimeContainer}>
-        <View style={styles.activeDot} />
+      <Text style={[styles.tableText, styles.recordColumn]}>
+        {recordType}
+      </Text>
 
-        <Text style={styles.patientTime}>
-          {time}
-        </Text>
-      </View>
+      <Text style={[styles.tableText, styles.accessedColumn]}>
+        {accessedBy}
+      </Text>
+
+      <Text style={[styles.tableText, styles.facilityColumn]}>
+        {facility}
+      </Text>
+
+      <Text style={[styles.tableText, styles.timeColumn]}>
+        {time}
+      </Text>
+
     </Pressable>
   );
 }
 
-/* =========================
-   APPOINTMENT
-========================= */
 
-function Appointment({
-  time,
-  name,
-  type,
+/* ============================================================
+   SYSTEM STATUS
+============================================================ */
+
+function SystemStatus({
+  icon,
+  title,
+  status,
 }: {
-  time: string;
-  name: string;
-  type: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  status: string;
 }) {
   return (
-    <View style={styles.appointment}>
-      <View style={styles.timeContainer}>
-        <Text style={styles.appointmentTime}>
-          {time}
-        </Text>
+    <View style={styles.statusRow}>
+
+      <View style={styles.statusIcon}>
+        <Ionicons
+          name="checkmark"
+          size={16}
+          color="#FFFFFF"
+        />
       </View>
 
-      <View style={styles.appointmentLine} />
+      <View style={styles.statusInfo}>
 
-      <View style={styles.appointmentInfo}>
-        <Text style={styles.appointmentName}>
-          {name}
+        <View style={styles.statusTitleRow}>
+
+          <Ionicons
+            name={icon}
+            size={17}
+            color="#123B78"
+          />
+
+          <Text style={styles.statusTitle}>
+            {title}
+          </Text>
+
+        </View>
+
+        <Text style={styles.statusText}>
+          {status}
         </Text>
 
-        <Text style={styles.appointmentType}>
-          {type}
-        </Text>
       </View>
+
     </View>
   );
 }
 
-/* =========================
+
+/* ============================================================
    STYLES
-========================= */
+============================================================ */
 
 const styles = StyleSheet.create({
+
+  /* APP */
+
   appContainer: {
     flex: 1,
     flexDirection: 'row',
@@ -683,588 +814,661 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
 
+  /* ==========================================================
+     SIDEBAR
+  ========================================================== */
+
   sidebar: {
-    width: 245,
-    backgroundColor: '#0F2A43',
-    paddingVertical: 28,
-    paddingHorizontal: 18,
+    width: 255,
+    backgroundColor: '#FFFFFF',
+    borderRightWidth: 1,
+    borderRightColor: '#E2E8F0',
+    paddingVertical: 25,
+    paddingHorizontal: 15,
     justifyContent: 'space-between',
   },
 
-  logoContainer: {
+  sidebarBrand: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    marginBottom: 45,
   },
 
-  logoIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
+  governmentLogo: {
+    width: 58,
+    height: 72,
   },
 
-  logoIconText: {
-    color: '#FFFFFF',
-    fontSize: 25,
-    fontWeight: '700',
+  brandTextContainer: {
+    marginLeft: 10,
+    flex: 1,
   },
 
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+  carelinkText: {
+    color: '#123B78',
+    fontSize: 19,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
 
-  logoSubtitle: {
-    color: '#94A3B8',
+  brandSubtitle: {
+    color: '#475569',
     fontSize: 10,
-    marginTop: 2,
+    marginTop: 4,
   },
 
-  navigation: {
-    gap: 4,
+  sidebarDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 25,
   },
 
-  navigationLabel: {
-    color: '#64748B',
+  menuSection: {
+    flex: 1,
+  },
+
+  menuLabel: {
+    color: '#94A3B8',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,
     marginLeft: 12,
-    marginBottom: 8,
+    marginBottom: 9,
   },
 
-  secondLabel: {
+  servicesLabel: {
     marginTop: 28,
   },
 
-  navItem: {
+  sidebarItem: {
     height: 46,
-    borderRadius: 9,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    marginBottom: 3,
+    paddingHorizontal: 13,
+    marginBottom: 4,
   },
 
-  activeNavItem: {
-    backgroundColor: '#1D4ED8',
+  sidebarItemActive: {
+    backgroundColor: '#123B78',
   },
 
-  navIcon: {
-    width: 27,
-    color: '#94A3B8',
-    fontSize: 19,
+  sidebarItemText: {
+    color: '#475569',
+    fontSize: 13,
+    marginLeft: 13,
+    fontWeight: '500',
   },
 
-  activeNavText: {
+  sidebarItemTextActive: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  sidebarEmergencyText: {
+    color: '#DC2626',
     fontWeight: '600',
   },
 
-  navText: {
-    color: '#CBD5E1',
-    fontSize: 14,
+  sidebarBottom: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 15,
   },
 
-  emergencyIcon: {
-    width: 27,
-    color: '#F87171',
-    fontSize: 18,
-    fontWeight: '800',
-  },
+  /* ==========================================================
+     MAIN
+  ========================================================== */
 
   main: {
     flex: 1,
     minWidth: 0,
   },
 
+  /* ==========================================================
+     HEADER
+  ========================================================== */
+
   header: {
-    height: 76,
+    height: 84,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
 
-  headerTitle: {
-    color: '#0F2A43',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
-  headerSubtitle: {
-    color: '#94A3B8',
-    fontSize: 11,
+  menuButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 18,
+  },
+
+  compactBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  compactGovernmentLogo: {
+    width: 42,
+    height: 55,
+    marginRight: 10,
+  },
+
+  compactCarelink: {
+    color: '#123B78',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+
+  compactSubtitle: {
+    color: '#64748B',
+    fontSize: 9,
     marginTop: 2,
   },
 
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
+    gap: 27,
+  },
+
+  facilityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+
+  facilityLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  facilityName: {
+    color: '#172B4D',
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
+    width: 42,
+    height: 42,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
 
-  notificationIcon: {
-    fontSize: 18,
-    color: '#475569',
-  },
-
-  notificationDot: {
+  notificationBadge: {
     position: 'absolute',
-    top: 9,
-    right: 9,
-    width: 7,
-    height: 7,
-    borderRadius: 5,
-    backgroundColor: '#2563EB',
+    right: 2,
+    top: 1,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#DC2626',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
-  profileMini: {
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+
+  userContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  avatar: {
+  userAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
 
-  avatarText: {
-    color: '#2563EB',
-    fontWeight: '700',
-    fontSize: 16,
+  userInfo: {
+    marginRight: 9,
   },
 
-  profileName: {
-    color: '#0F172A',
+  userName: {
+    color: '#172B4D',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
-  profileRole: {
-    color: '#94A3B8',
+  userRole: {
+    color: '#64748B',
     fontSize: 11,
     marginTop: 2,
   },
 
-  chevron: {
-    color: '#94A3B8',
-    fontSize: 18,
-    marginLeft: 10,
-  },
+  /* ==========================================================
+     CONTENT
+  ========================================================== */
 
   scrollView: {
     flex: 1,
   },
 
   content: {
-    padding: 32,
-    paddingBottom: 50,
+    paddingHorizontal: 32,
+    paddingTop: 25,
+    paddingBottom: 35,
   },
 
-  welcomeSection: {
-    marginBottom: 26,
-  },
-
-  welcomeTitle: {
-    color: '#0F172A',
-    fontSize: 26,
-    fontWeight: '700',
-  },
-
-  welcomeSubtitle: {
-    color: '#64748B',
-    fontSize: 14,
-    marginTop: 6,
-  },
-
-  statsGrid: {
+  pageHeader: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 32,
-  },
-
-  statCard: {
-    flex: 1,
-    minHeight: 160,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 20,
-  },
-
-  emergencyStatCard: {
-    borderColor: '#FECACA',
-  },
-
-  statIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 18,
   },
 
-  statIconText: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-
-  statNumber: {
-    color: '#0F172A',
+  pageTitle: {
+    color: '#172B4D',
     fontSize: 27,
     fontWeight: '700',
   },
 
-  statLabel: {
-    color: '#64748B',
+  dateText: {
+    color: '#172B4D',
     fontSize: 12,
-    marginTop: 2,
-  },
-
-  statDetail: {
-    fontSize: 11,
     fontWeight: '600',
-    marginTop: 9,
   },
 
-  sectionHeader: {
-    marginBottom: 14,
-  },
+  /* ==========================================================
+     INFO BANNER
+  ========================================================== */
 
-  sectionTitle: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-
-  sectionSubtitle: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-  quickActions: {
+  infoBanner: {
+    minHeight: 52,
+    backgroundColor: '#EEF4FF',
+    borderWidth: 1,
+    borderColor: '#BFD3FF',
+    borderRadius: 5,
     flexDirection: 'row',
-    gap: 14,
-    marginBottom: 30,
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    marginBottom: 23,
   },
 
-  actionCard: {
-    flex: 1,
-    minHeight: 95,
+  infoIcon: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
+    backgroundColor: '#123B78',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  infoText: {
+    color: '#123B78',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* ==========================================================
+     FIND PATIENT
+  ========================================================== */
+
+  findPatientCard: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 5,
+    padding: 20,
+    marginBottom: 23,
+  },
+
+  findPatientTitle: {
+    color: '#172B4D',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 17,
+  },
+
+  findPatientSubtitle: {
+    color: '#475569',
+    fontSize: 13,
+    marginBottom: 25,
+  },
+
+  searchArea: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+
+  idSearchSection: {
+    flex: 1,
+  },
+
+  searchLabel: {
+    color: '#172B4D',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  emergencyActionCard: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FFFBFB',
+  inputContainer: {
+    flex: 1,
+    height: 51,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    backgroundColor: '#FFFFFF',
   },
 
-  actionIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 11,
-    backgroundColor: '#EFF6FF',
+  patientInput: {
+    flex: 1,
+    height: '100%',
+    marginLeft: 10,
+    color: '#172B4D',
+    fontSize: 12,
+    outlineStyle: 'none' as any,
+  },
+
+  searchButton: {
+    height: 51,
+    width: 105,
+    marginLeft: 18,
+    backgroundColor: '#123B78',
+    borderRadius: 5,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  emergencyActionIcon: {
-    backgroundColor: '#FEF2F2',
-  },
-
-  actionIconText: {
-    color: '#2563EB',
-    fontSize: 22,
-    fontWeight: '600',
-  },
-
-  emergencyActionIconText: {
-    color: '#DC2626',
-  },
-
-  actionTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  actionTitle: {
-    color: '#0F172A',
+  searchButtonText: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
 
-  actionDescription: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  actionArrow: {
-    color: '#94A3B8',
-    fontSize: 18,
-    marginLeft: 8,
-  },
-
-  lowerGrid: {
-    flexDirection: 'row',
-    gap: 18,
-    marginBottom: 22,
-  },
-
-  largeCard: {
-    flex: 1.55,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 20,
-  },
-
-  scheduleCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 20,
-  },
-
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-
-  cardTitle: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  cardSubtitle: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  viewAll: {
-    color: '#2563EB',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  patientRow: {
-    minHeight: 64,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  patientAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  patientAvatarText: {
-    color: '#2563EB',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
-  patientInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-
-  patientName: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  patientId: {
-    color: '#94A3B8',
-    fontSize: 10,
-    marginTop: 3,
-  },
-
-  patientTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 7,
-  },
-
-  patientTime: {
+  exampleText: {
     color: '#64748B',
-    fontSize: 10,
-  },
-
-  appointment: {
-    flexDirection: 'row',
-    minHeight: 65,
-  },
-
-  timeContainer: {
-    width: 45,
-  },
-
-  appointmentTime: {
-    color: '#2563EB',
     fontSize: 11,
-    fontWeight: '700',
+    marginTop: 12,
   },
 
-  appointmentLine: {
-    width: 2,
-    backgroundColor: '#DBEAFE',
-    marginHorizontal: 10,
+  /* OR */
+
+  orContainer: {
+    width: 75,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 10,
   },
 
-  appointmentInfo: {
+  orLine: {
+    height: 40,
+    width: 1,
+    backgroundColor: '#CBD5E1',
+  },
+
+  orText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '600',
+    marginVertical: 6,
+  },
+
+  /* BIOMETRIC */
+
+  biometricSection: {
     flex: 1,
+    paddingLeft: 5,
   },
 
-  appointmentName: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  appointmentType: {
-    color: '#94A3B8',
-    fontSize: 10,
-    marginTop: 4,
-  },
-
-  scheduleButton: {
-    marginTop: 5,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-
-  scheduleButtonText: {
-    color: '#2563EB',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  emergencyBanner: {
-    backgroundColor: '#FFF7F7',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 12,
-    padding: 20,
+  biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  emergencyBannerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FEE2E2',
+  fingerprintIconBox: {
+    width: 76,
+    height: 76,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 5,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  emergencyBannerIconText: {
-    color: '#DC2626',
-    fontSize: 22,
+  scanButton: {
+    height: 53,
+    flex: 1,
+    marginLeft: 18,
+    borderWidth: 1,
+    borderColor: '#123B78',
+    borderRadius: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  scanButtonText: {
+    color: '#123B78',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  fingerprintHelp: {
+    color: '#64748B',
+    fontSize: 11,
+    marginLeft: 94,
+    marginTop: 10,
+  },
+
+  /* ==========================================================
+     LOWER SECTION
+  ========================================================== */
+
+  lowerSection: {
+    flexDirection: 'row',
+    gap: 22,
+    marginBottom: 28,
+  },
+
+  recentCard: {
+    flex: 3,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+
+  statusCard: {
+    flex: 1.1,
+    minWidth: 260,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+
+  cardSectionTitle: {
+    color: '#172B4D',
+    fontSize: 14,
+    fontWeight: '800',
+    paddingHorizontal: 19,
+    paddingVertical: 17,
+  },
+
+  /* ==========================================================
+     TABLE
+  ========================================================== */
+
+  tableHeader: {
+    minHeight: 48,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+
+  tableHeaderText: {
+    color: '#172B4D',
+    fontSize: 11,
     fontWeight: '800',
   },
 
-  emergencyContent: {
-    flex: 1,
-    marginLeft: 15,
-    marginRight: 20,
-  },
-
-  emergencyTitle: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  emergencyDescription: {
-    color: '#7F1D1D',
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 4,
-  },
-
-  emergencyButton: {
-    backgroundColor: '#DC2626',
+  patientTableRow: {
+    minHeight: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 8,
   },
 
-  emergencyButtonText: {
-    color: '#FFFFFF',
+  tableText: {
+    color: '#172B4D',
+    fontSize: 11,
+  },
+
+  patientIdColumn: {
+    width: 95,
+  },
+
+  patientNameColumn: {
+    flex: 1.2,
+  },
+
+  recordColumn: {
+    flex: 1.25,
+  },
+
+  accessedColumn: {
+    flex: 1.15,
+  },
+
+  facilityColumn: {
+    flex: 1.4,
+  },
+
+  timeColumn: {
+    width: 55,
+    textAlign: 'right',
+  },
+
+  viewAllButton: {
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 18,
+  },
+
+  viewAllText: {
+    color: '#123B78',
     fontSize: 12,
     fontWeight: '700',
   },
 
-  footer: {
+  /* ==========================================================
+     SYSTEM STATUS
+  ========================================================== */
+
+  statusRow: {
+    minHeight: 75,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 30,
+    paddingHorizontal: 18,
+  },
+
+  statusIcon: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
+    backgroundColor: '#16A34A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  statusInfo: {
+    flex: 1,
+  },
+
+  statusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  statusTitle: {
+    color: '#172B4D',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  statusText: {
+    color: '#475569',
+    fontSize: 11,
+    marginTop: 5,
+    marginLeft: 24,
+  },
+
+  /* ==========================================================
+     FOOTER
+  ========================================================== */
+
+  footer: {
+    minHeight: 70,
+    borderTopWidth: 1,
+    borderTopColor: '#CBD5E1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 5,
   },
 
   footerText: {
-    color: '#CBD5E1',
-    fontSize: 10,
+    color: '#64748B',
+    fontSize: 11,
+  },
+
+  footerDivider: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginHorizontal: 14,
+  },
+
+  footerRight: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  footerLink: {
+    color: '#475569',
+    fontSize: 11,
   },
 });
-

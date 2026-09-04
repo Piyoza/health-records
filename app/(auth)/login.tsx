@@ -1,4 +1,3 @@
-
 import {
   ActivityIndicator,
   Alert,
@@ -12,105 +11,106 @@ import {
 import { useState } from 'react';
 import { Link, router } from 'expo-router';
 
-import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const {
-    signIn,
-    role,
-  } = useAuth();
-
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert(
-        'Missing information',
-        'Please enter your email and password.'
-      );
+  if (!email.trim() || !password) {
+    Alert.alert(
+      'Missing information',
+      'Please enter your email and password.'
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    console.log('LOGIN: attempting...');
+
+    // 1. Sign in with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error) {
+      console.error('LOGIN ERROR:', error.message);
+
+      Alert.alert('Login failed', error.message);
       return;
     }
 
-    try {
-      setLoading(true);
-
-      console.log(
-        'LOGIN SCREEN: attempting login'
-      );
-
-      await signIn(
-        email.trim(),
-        password
-      );
-
-      console.log(
-        'LOGIN SCREEN: authentication successful'
-      );
-
-      /*
-       * AuthContext loads the user's role
-       * from the profiles table after login.
-       */
-
-      if (role === 'admin') {
-        console.log(
-          'ROUTING TO ADMIN DASHBOARD'
-        );
-
-        router.replace(
-          '/(app)/admin-dashboard'
-        );
-
-        return;
-      }
-
-      if (
-        role === 'healthcare_worker'
-      ) {
-        console.log(
-          'ROUTING TO HEALTHCARE WORKER DASHBOARD'
-        );
-
-        router.replace(
-          '/(app)/dashboard'
-        );
-
-        return;
-      }
-
-      /*
-       * If the user has no valid role,
-       * do not allow them into the application.
-       */
-
-      Alert.alert(
-        'Access denied',
-        'Your account does not have a valid application role.'
-      );
-    } catch (error: any) {
-      console.error(
-        'LOGIN SCREEN ERROR:',
-        error
-      );
-
-      Alert.alert(
-        'Login failed',
-        error?.message ||
-          'Unable to sign in.'
-      );
-    } finally {
-      setLoading(false);
+    // Make sure we actually received a user
+    if (!data.user) {
+      Alert.alert('Login failed', 'User information could not be loaded.');
+      return;
     }
-  };
+
+    console.log('LOGIN SUCCESS:', data.user.id);
+
+    // 2. Get the user's role from the profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError) {
+      console.error('PROFILE ERROR:', profileError.message);
+
+      Alert.alert(
+        'Login error',
+        'Your account role could not be determined.'
+      );
+
+      return;
+    }
+
+    console.log('USER ROLE:', profile.role);
+
+    // 3. Redirect according to role
+    if (profile.role === 'admin') {
+      router.replace('/admin');
+    } 
+    else if (profile.role === 'healthcare_worker') {
+  router.replace('/dashboard');
+}
+    /*else if (profile.role === 'patient') {
+      router.replace('/patient/dashboard');
+    } */
+    else {
+      Alert.alert(
+        'Account error',
+        'Your account does not have a valid role assigned.'
+      );
+    }
+
+  } catch (error) {
+    console.error('LOGIN EXCEPTION:', error);
+
+    Alert.alert(
+      'Error',
+      'Something went wrong while logging in.'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <View style={styles.container}>
+
+      {/* LOGO */}
       <Text style={styles.logo}>
-        MediVault
+        CARELINK
       </Text>
 
+      {/* TITLE */}
       <Text style={styles.title}>
         Welcome Back
       </Text>
@@ -119,9 +119,11 @@ export default function LoginScreen() {
         Sign in to access patient records
       </Text>
 
+      {/* EMAIL */}
       <TextInput
         style={styles.input}
         placeholder="Email address"
+        placeholderTextColor="#94a3b8"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -130,15 +132,18 @@ export default function LoginScreen() {
         editable={!loading}
       />
 
+      {/* PASSWORD */}
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="#94a3b8"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         editable={!loading}
       />
 
+      {/* SIGN IN BUTTON */}
       <TouchableOpacity
         style={[
           styles.button,
@@ -146,11 +151,10 @@ export default function LoginScreen() {
         ]}
         onPress={handleLogin}
         disabled={loading}
+        activeOpacity={0.8}
       >
         {loading ? (
-          <ActivityIndicator
-            color="#ffffff"
-          />
+          <ActivityIndicator color="#ffffff" />
         ) : (
           <Text style={styles.buttonText}>
             Sign In
@@ -158,12 +162,20 @@ export default function LoginScreen() {
         )}
       </TouchableOpacity>
 
-      <Link
-        href="/(auth)/register"
-        style={styles.registerLink}
-      >
-        Don't have an account? Register
-      </Link>
+      {/* REGISTER LINK */}
+      <View style={styles.registerContainer}>
+        <Text style={styles.registerText}>
+          Don't have an account?{' '}
+        </Text>
+
+        <Link
+          href="/(auth)/register"
+          style={styles.registerLink}
+        >
+          Register
+        </Link>
+      </View>
+
     </View>
   );
 }
@@ -172,7 +184,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
     backgroundColor: '#ffffff',
   },
 
@@ -182,6 +194,7 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     textAlign: 'center',
     marginBottom: 35,
+    letterSpacing: 1,
   },
 
   title: {
@@ -206,6 +219,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     fontSize: 16,
     color: '#0f172a',
+    backgroundColor: '#ffffff',
   },
 
   button: {
@@ -227,12 +241,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 22,
+  },
+
+  registerText: {
+    fontSize: 15,
+    color: '#64748b',
+  },
+
   registerLink: {
-    textAlign: 'center',
-    marginTop: 20,
     fontSize: 15,
     color: '#2563eb',
     fontWeight: '600',
   },
 });
-
