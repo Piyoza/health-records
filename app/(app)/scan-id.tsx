@@ -170,10 +170,32 @@ const takePhoto = async () => {
 
     console.log('BARCODE AREA CROPPED:', cropped.uri);
 
-    Alert.alert(
-      'Barcode Area Ready',
-      'The barcode section was cropped successfully.'
-    );
+    
+    console.log('STARTING BARCODE SCAN...');
+
+const results = await Camera.scanFromURLAsync(
+  cropped.uri,
+  ['code39', 'pdf417', 'code128']
+);
+
+console.log('BARCODE RESULTS:', results);
+
+if (results.length === 0) {
+  Alert.alert(
+    'No Barcode Detected',
+    'The cropped barcode area could not be decoded.'
+  );
+} else {
+  Alert.alert(
+    'Barcode Found',
+    results
+      .map(
+        (result) =>
+          `Type: ${result.type}\nData: ${result.data}`
+      )
+      .join('\n\n')
+  );
+}
 
   } catch (error) {
     console.error('ID SCAN ERROR:', error);
