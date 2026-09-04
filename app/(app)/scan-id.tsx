@@ -21,6 +21,29 @@ import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useAuth } from '../../context/AuthContext';
 
+import TextRecognition from '@react-native-ml-kit/text-recognition';
+
+import { isValidSouthAfricanId } from '../../utils/saIdValidator';
+
+export const scanIdFromImage = async (imageUri: string) => {
+  try {
+    const result = await TextRecognition.recognize(imageUri);
+
+    // Extract all 13-digit number sequences from the recognized text
+    const matches = result.text.match(/\d{13}/g) ?? [];
+    
+    // Find the first valid SA ID number using your Luhn validator
+    const validId = matches.find((candidate) =>
+      isValidSouthAfricanId(candidate)
+    );
+
+    return validId ?? null;
+  } catch (error) {
+    console.error('OCR Processing Error:', error);
+    return null;
+  }
+};
+
 export default function ScanIdScreen() {
   const { session } = useAuth();
 
@@ -71,6 +94,16 @@ export default function ScanIdScreen() {
       </View>
     );
   }
+
+const processIdImage = async (imageUri: string) => {
+  const result = await TextRecognition.recognize(imageUri);
+  
+  // Extract 13-digit numbers from recognized text blocks
+  const matches = result.text.match(/\d{13}/g) || [];
+  const validId = matches.find(candidate => isValidSouthAfricanId(candidate));
+  
+  console.log('Extracted via OCR:', validId);
+};
 
 const takePhoto = async () => {
   if (!cameraRef.current || processing) return;
