@@ -23,7 +23,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router", {
+          "cameraPermission": "Allow MediVault to scan patient IDs.",
+          "barcodeScannerEnabled": true
+        }
     ]
   }
 }

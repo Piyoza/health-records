@@ -21,6 +21,29 @@ import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useAuth } from '../../context/AuthContext';
 
+import TextRecognition from '@react-native-ml-kit/text-recognition';
+
+import { isValidSouthAfricanId } from '../../utils/saIdValidator';
+
+export const scanIdFromImage = async (imageUri: string) => {
+  try {
+    const result = await TextRecognition.recognize(imageUri);
+
+    // Extract all 13-digit number sequences from the recognized text
+    const matches = result.text.match(/\d{13}/g) ?? [];
+    
+    // Find the first valid SA ID number using your Luhn validator
+    const validId = matches.find((candidate) =>
+      isValidSouthAfricanId(candidate)
+    );
+
+    return validId ?? null;
+  } catch (error) {
+    console.error('OCR Processing Error:', error);
+    return null;
+  }
+};
+
 export default function ScanIdScreen() {
   const { session } = useAuth();
 
@@ -72,122 +95,92 @@ export default function ScanIdScreen() {
     );
   }
 
+const processIdImage = async (imageUri: string) => {
+  const result = await TextRecognition.recognize(imageUri);
+  
+  // Extract 13-digit numbers from recognized text blocks
+  const matches = result.text.match(/\d{13}/g) || [];
+  const validId = matches.find(candidate => isValidSouthAfricanId(candidate));
+  
+  console.log('Extracted via OCR:', validId);
+};
+
 const takePhoto = async () => {
-  if (!cameraRef.current || processing) {
-    return;
-  }
+  if (!cameraRef.current || processing) return;
 
   try {
     setProcessing(true);
 
     console.log('CAPTURING ID CARD...');
 
-    const photo =
-      await cameraRef.current.takePictureAsync({
-        quality: 1,
-        skipProcessing: false,
-      });
+    const photo = await cameraRef.current.takePictureAsync({
+      quality: 1,
+      skipProcessing: false,
+    });
 
     if (!photo?.uri) {
-      throw new Error(
-        'The camera did not return an image.'
-      );
+      throw new Error('Photo capture failed');
     }
 
-    console.log(
-      'PHOTO CAPTURED:',
-      photo.uri
-    );
+    console.log('PHOTO CAPTURED:', photo.uri);
+    console.log('PHOTO SIZE:', photo.width, photo.height);
 
     /*
-     * Resize the image first.
-     * This gives the barcode scanner a
-     * manageable high-quality image.
+     * The South African Smart ID has the barcodes on the
+     * reverse side. We first enlarge the captured image.
      */
-    const manipulated =
-      await ImageManipulator.manipulateAsync(
-        photo.uri,
-        [
-          {
-            resize: {
-              width: 1600,
-            },
-          },
-        ],
+    const enlarged = await ImageManipulator.manipulateAsync(
+      photo.uri,
+      [
         {
-          compress: 1,
-          format:
-            ImageManipulator.SaveFormat.JPEG,
-        }
-      );
-
-    console.log(
-      'IMAGE PROCESSED:',
-      manipulated.uri
+          resize: {
+            width: 2000,
+          },
+        },
+      ],
+      {
+        compress: 1,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
     );
+
+    console.log('IMAGE ENLARGED:', enlarged.uri);
 
     /*
-     * Scan the captured image.
+     * Crop the lower portion of the card where the
+     * barcode region is located.
      */
-    const results =
-      await Camera.scanFromURLAsync(
-        manipulated.uri,
-        [
-          'code39',
-          'pdf417',
-          'code128',
-        ]
-      );
-
-    console.log(
-      '================================'
+    const cropped = await ImageManipulator.manipulateAsync(
+      enlarged.uri,
+      [
+        {
+          crop: {
+            originX: 0,
+            originY: Math.floor(enlarged.height * 0.45),
+            width: enlarged.width,
+            height: Math.floor(enlarged.height * 0.55),
+          },
+        },
+      ],
+      {
+        compress: 1,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
     );
 
-    console.log(
-      'BARCODE SCAN RESULTS:'
-    );
-
-    console.log(results);
-
-    console.log(
-      '================================'
-    );
-
-    if (!results || results.length === 0) {
-      Alert.alert(
-        'No barcode detected',
-        'The ID barcode could not be detected. Make sure the barcode is clearly visible, then try again.'
-      );
-
-      return;
-    }
-
-    const firstResult = results[0];
-
-    console.log(
-      'BARCODE TYPE:',
-      firstResult.type
-    );
-
-    console.log(
-      'BARCODE DATA LENGTH:',
-      firstResult.data.length
-    );
+    console.log('BARCODE AREA CROPPED:', cropped.uri);
 
     Alert.alert(
-      'Barcode detected',
-      `Type: ${firstResult.type}\n\nData length: ${firstResult.data.length}`
+      'Barcode Area Ready',
+      'The barcode section was cropped successfully.'
     );
 
   } catch (error) {
-    console.error(
-      'ID SCAN ERROR:',
-      error
-    );
+    console.error('ID SCAN ERROR:', error);
 
     Alert.alert(
-      'Scan error',
-      'Something went wrong while scanning the ID image.'
+      'Error',
+      'Could not process the ID photo.'
     );
   } finally {
     setProcessing(false);
