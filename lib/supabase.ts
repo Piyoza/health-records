@@ -7,10 +7,17 @@ declare const process: {
   env: Record<string, string | undefined>;
 };
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL;
 
-console.log('SUPABASE URL:', supabaseUrl);
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+console.log(
+  'SUPABASE URL:',
+  supabaseUrl
+);
+
 console.log(
   'SUPABASE KEY EXISTS:',
   !!supabaseAnonKey
@@ -43,7 +50,10 @@ const storage =
   Platform.OS === 'web'
     ? {
         getItem: (key: string) => {
-          if (typeof localStorage === 'undefined') {
+          if (
+            typeof localStorage ===
+            'undefined'
+          ) {
             return Promise.resolve(null);
           }
 
@@ -57,37 +67,48 @@ const storage =
           value: string
         ) => {
           if (
-            typeof localStorage === 'undefined'
+            typeof localStorage ===
+            'undefined'
           ) {
             return Promise.resolve();
           }
 
-          localStorage.setItem(key, value);
+          localStorage.setItem(
+            key,
+            value
+          );
+
           return Promise.resolve();
         },
 
         removeItem: (key: string) => {
           if (
-            typeof localStorage === 'undefined'
+            typeof localStorage ===
+            'undefined'
           ) {
             return Promise.resolve();
           }
 
           localStorage.removeItem(key);
+
           return Promise.resolve();
         },
       }
     : AsyncStorage;
 
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      storage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  }
-);
+export const supabase =
+  createClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      auth: {
+        storage,
+        autoRefreshToken: true,
+        persistSession: true,
+
+        // Required so Supabase can process
+        // the password-recovery URL on web.
+        detectSessionInUrl: true,
+      },
+    }
+  );

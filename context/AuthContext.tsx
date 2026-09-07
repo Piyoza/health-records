@@ -110,6 +110,13 @@ export function AuthProvider({
           return;
         }
 
+        // PASSWORD RECOVERY
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log(
+            'AUTH: password recovery session detected'
+          );
+        }
+
         setSession(newSession);
         setLoading(false);
       }

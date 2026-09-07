@@ -1,8 +1,6 @@
-import { createPatient } from '../../services/patientService';
-import { getSAIdDetails } from '../../utils/saIdDetails';
-import { supabase } from '../../lib/supabase';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -14,20 +12,33 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 
+import { supabase } from '../../lib/supabase';
+
+type Screen =
+  | 'dashboard'
+  | 'search-patient'
+  | 'register-patient'
+  | 'assign-patient'
+  | 'view-workers'
+  | 'create-worker'
+  | 'assign-role'
+  | 'assign-facility'
+  | 'assign-department'
+  | 'activity-logs';
+
 type Patient = {
   id: string;
   doctor: string;
   status: 'Assigned' | 'Unassigned';
   created: string;
 };
-type HealthcareWorker = {
+
+type Worker = {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string;
   role: string;
-  department: string | null;
   facility: string;
-  active: boolean;
+  department: string;
 };
 
 const doctors = [
@@ -64,155 +75,198 @@ const initialPatients: Patient[] = [
   },
 ];
 
+const initialWorkers: Worker[] = [
+  {
+    id: 'HW-0001',
+    name: 'Dr. Naidoo',
+    role: 'Doctor',
+    facility: 'Durban Central Hospital',
+    department: 'General Medicine',
+  },
+  {
+    id: 'HW-0002',
+    name: 'Dr. Patel',
+    role: 'Doctor',
+    facility: 'Addington Hospital',
+    department: 'General Medicine',
+  },
+  {
+    id: 'HW-0003',
+    name: 'Dr. Mkhize',
+    role: 'Doctor',
+    facility: 'King Edward VIII Hospital',
+    department: 'Emergency',
+  },
+];
+
 export default function AdminDashboard() {
+  const [screen, setScreen] = useState<Screen>('dashboard');
+
+  // SIDEBAR
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [patientsOpen, setPatientsOpen] = useState(true);
+  const [workersOpen, setWorkersOpen] = useState(false);
 
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [healthcareWorkers, setHealthcareWorkers] =
-  useState<HealthcareWorker[]>([]);
+  // PATIENTS
+  const [patients, setPatients] = useState<Patient[]>(
+    initialPatients
+  );
 
-  const [showAddPatient, setShowAddPatient] = useState(false);
+  const [search, setSearch] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [patientIdNumber, setPatientIdNumber] = useState('');
 
-  const [showAssign, setShowAssign] = useState(false);
-
+  // ASSIGNMENT
   const [selectedPatient, setSelectedPatient] =
     useState<Patient | null>(null);
 
-  const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [selectedDoctor, setSelectedDoctor] =
+    useState('');
 
-  const [successMessage, setSuccessMessage] = useState('');
+  const [showAssignModal, setShowAssignModal] =
+    useState(false);
 
-  const [search, setSearch] = useState('');
+  // WORKERS
+  const [workers] = useState<Worker[]>(initialWorkers);
 
-  const [patientFirstName, setPatientFirstName] = useState('');
-const [patientLastName, setPatientLastName] = useState('');
+  // SUCCESS MESSAGE
+  const [successMessage, setSuccessMessage] =
+    useState('');
 
-  const [patientIdNumber, setPatientIdNumber] = useState('');
+  // CREATE WORKER
+  const [workerFirstName, setWorkerFirstName] = useState('');
+  const [workerLastName, setWorkerLastName] = useState('');
+  const [workerEmail, setWorkerEmail] = useState('');
+  const [workerPassword, setWorkerPassword] = useState('');
+  const [workerRole, setWorkerRole] = useState('Doctor');
 
-  /*
-   * Generates the next CARELINK file number.
-   *
-   * Example:
-   * CL-0001
-   * CL-0002
-   * CL-0003
-   */
+  const navigate = (newScreen: Screen) => {
+    setScreen(newScreen);
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+
+    setTimeout(() => {
+      setSuccessMessage('');
+    }, 3000);
+  };
+
+  // ------------------------------------------------
+  // LOGOUT
+  // ------------------------------------------------
+
+  const logout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } =
+              await supabase.auth.signOut();
+
+            if (error) {
+              Alert.alert(
+                'Logout Error',
+                error.message
+              );
+              return;
+            }
+
+            router.replace('(auth)/login');
+          },
+        },
+      ]
+    );
+  };
+
+  // ------------------------------------------------
+  // PATIENT NUMBER
+  // ------------------------------------------------
+
   const generatePatientNumber = () => {
     const nextNumber = patients.length + 1;
 
     return `CL-${String(nextNumber).padStart(4, '0')}`;
   };
-const fetchPatients = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('patients')
-      .select('id, file_number, created_at')
-      .order('created_at', { ascending: false });
 
-    if (error) {
-      throw error;
+  // ------------------------------------------------
+  // REGISTER PATIENT
+  // ------------------------------------------------
+
+  const registerPatient = () => {
+    if (
+      !patientName.trim() ||
+      !patientIdNumber.trim()
+    ) {
+      Alert.alert(
+        'Missing Information',
+        'Please enter the patient name and South African ID number.'
+      );
+
+      return;
     }
 
-    setPatients(
-  (data ?? []).map((patient) => ({
-    id: patient.file_number ?? patient.id,
-    doctor: 'Unassigned',
-    status: 'Unassigned',
-    created: new Date(patient.created_at).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }),
-  }))
-);
+    const newPatientNumber =
+      generatePatientNumber();
 
-console.log('Patients loaded:', data);
-  } catch (error) {
-    console.error('Error fetching patients:', error);
-  }
-};
-useEffect(() => {
-  fetchPatients();
-}, []);
+    const newPatient: Patient = {
+      id: newPatientNumber,
+      doctor: 'Unassigned',
+      status: 'Unassigned',
+      created: '04 Sep 2026',
+    };
 
+    setPatients((current) => [
+      ...current,
+      newPatient,
+    ]);
 
-
- const addPatient = async () => {
-  if (
-    !patientFirstName.trim() ||
-    !patientLastName.trim() ||
-    !patientIdNumber.trim()
-  ) {
-    return;
-  }
-
-try {
-  const idDetails = getSAIdDetails(patientIdNumber.trim());
-
-  if (!idDetails) {
-    setSuccessMessage(
-      'Invalid South African ID number. Please check the ID number.'
-    );
-
-    setTimeout(() => {
-      setSuccessMessage('');
-    }, 5000);
-
-    return;
-  }
-
-  const patient = await createPatient({
-    first_name: patientFirstName.trim(),
-    last_name: patientLastName.trim(),
-    id_number: patientIdNumber.trim(),
-    date_of_birth: idDetails.dateOfBirth,
-    gender: idDetails.gender,
-  });
-
-    setPatientFirstName('');
-    setPatientLastName('');
+    setPatientName('');
     setPatientIdNumber('');
-    setShowAddPatient(false);
 
-    setSuccessMessage(
-  `Patient registered successfully. File Number: ${patient.file_number}`
-);
-
-    setTimeout(() => {
-      setSuccessMessage('');
-    }, 5000);
-  } catch (error) {
-  console.error('Error creating patient:', error);
-
-  if (
-    error instanceof Error &&
-    error.message.includes('patients_id_number_key')
-  ) {
-    setSuccessMessage(
-      'A patient with this South African ID number already exists.'
+    showSuccess(
+      `Patient registered successfully. File Number: ${newPatientNumber}`
     );
-  } else {
-    setSuccessMessage(
-      'Unable to register patient. Please try again.'
-    );
-  }
 
-  setTimeout(() => {
-    setSuccessMessage('');
-  }, 5000);
-}
-};
-
-  const openAssignDoctor = (patient: Patient) => {
-    setSelectedPatient(patient);
-    setSelectedDoctor(
-      patient.doctor === 'Unassigned' ? '' : patient.doctor
-    );
-    setShowAssign(true);
+    navigate('search-patient');
   };
 
-  const assignDoctor = () => {
-    if (!selectedPatient || !selectedDoctor) {
+  // ------------------------------------------------
+  // ASSIGN PATIENT
+  // ------------------------------------------------
+
+  const openAssignPatient = (
+    patient: Patient
+  ) => {
+    setSelectedPatient(patient);
+
+    setSelectedDoctor(
+      patient.doctor === 'Unassigned'
+        ? ''
+        : patient.doctor
+    );
+
+    setShowAssignModal(true);
+  };
+
+  const assignPatient = () => {
+    if (
+      !selectedPatient ||
+      !selectedDoctor
+    ) {
+      Alert.alert(
+        'Select Doctor',
+        'Please select a healthcare worker.'
+      );
+
       return;
     }
 
@@ -228,1052 +282,1503 @@ try {
       )
     );
 
-    setShowAssign(false);
+    setShowAssignModal(false);
 
-    setSuccessMessage(
-      `${selectedPatient.id} has been assigned to ${selectedDoctor}.`
+    showSuccess(
+      `${selectedPatient.id} assigned to ${selectedDoctor}`
     );
 
-    setTimeout(() => {
-      setSuccessMessage('');
-    }, 4000);
+    setSelectedPatient(null);
+    setSelectedDoctor('');
   };
 
-  const filteredPatients = patients.filter((patient) =>
-    patient.id.toLowerCase().includes(search.toLowerCase())
-  );
+  // ------------------------------------------------
+  // SEARCH
+  // ------------------------------------------------
 
-  const assignedCount = patients.filter(
-    (patient) => patient.status === 'Assigned'
-  ).length;
+  const filteredPatients =
+    patients.filter((patient) =>
+      patient.id
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    );
 
-  const unassignedCount = patients.filter(
-    (patient) => patient.status === 'Unassigned'
-  ).length;
+  const assignedPatients =
+    patients.filter(
+      (patient) =>
+        patient.status === 'Assigned'
+    ).length;
 
-  return (
-    <View style={styles.appContainer}>
+  const unassignedPatients =
+    patients.filter(
+      (patient) =>
+        patient.status === 'Unassigned'
+    ).length;
 
-      {/* =========================
-          SIDEBAR
-      ========================= */}
+  // ------------------------------------------------
+  // PAGE HEADER
+  // ------------------------------------------------
 
-      <View
-        style={[
-          styles.sidebar,
-          !sidebarOpen && styles.sidebarCollapsed,
-        ]}
-      >
+  const renderHeader = (
+    title: string,
+    subtitle: string
+  ) => {
+    return (
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>
+          {title}
+        </Text>
 
-        {/* GOVERNMENT / CARELINK LOGO */}
+        <Text style={styles.pageSubtitle}>
+          {subtitle}
+        </Text>
+      </View>
+    );
+  };
 
-        <View style={styles.logoArea}>
+  // ------------------------------------------------
+  // DASHBOARD
+  // ------------------------------------------------
 
-          <Image
-            source={require('../../assets/sa-government-logo.png')}
-            style={
-              sidebarOpen
-                ? styles.governmentLogo
-                : styles.governmentLogoCollapsed
-            }
-            resizeMode="contain"
-          />
+  const renderDashboard = () => (
+    <>
+      {renderHeader(
+        'Administration Dashboard',
+        'CARELINK healthcare administration'
+      )}
 
-          {sidebarOpen && (
-            <View style={styles.logoTextArea}>
-              <Text style={styles.carelinkText}>
-                CARELINK
-              </Text>
+      <View style={styles.privacyBanner}>
+        <Text style={styles.privacyIcon}>
+          🔒
+        </Text>
 
-              <Text style={styles.logoSubtitle}>
-                Electronic Health Records
-              </Text>
+        <View
+          style={styles.privacyTextContainer}
+        >
+          <Text style={styles.privacyTitle}>
+            Patient Privacy Protected
+          </Text>
 
-              <Text style={styles.departmentText}>
-                Department of Health
-              </Text>
-            </View>
-          )}
+          <Text style={styles.privacyText}>
+            Administrators can manage patient
+            files and assignments but cannot
+            access clinical or personal patient
+            information.
+          </Text>
+        </View>
+      </View>
 
+      {/* STATISTICS */}
+
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>
+            {patients.length}
+          </Text>
+
+          <Text style={styles.statLabel}>
+            Patient Files
+          </Text>
         </View>
 
-        {/* MENU */}
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>
+            {assignedPatients}
+          </Text>
 
-        {sidebarOpen && (
-          <View style={styles.sidebarMenu}>
+          <Text style={styles.statLabel}>
+            Assigned
+          </Text>
+        </View>
 
-            <Text style={styles.menuLabel}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>
+            {unassignedPatients}
+          </Text>
+
+          <Text style={styles.statLabel}>
+            Unassigned
+          </Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>
+            {workers.length}
+          </Text>
+
+          <Text style={styles.statLabel}>
+            Healthcare Workers
+          </Text>
+        </View>
+      </View>
+
+      {/* PATIENT FILES */}
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={styles.cardTitle}>
+              Patient Files
+            </Text>
+
+            <Text style={styles.cardSubtitle}>
+              Administrative view only
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() =>
+              navigate('register-patient')
+            }
+          >
+            <Text
+              style={styles.primaryButtonText}
+            >
+              + Register Patient
+            </Text>
+          </Pressable>
+        </View>
+
+        {patients.slice(0, 5).map(
+          (patient) => (
+            <View
+              key={patient.id}
+              style={styles.patientRow}
+            >
+              <View>
+                <Text
+                  style={
+                    styles.patientFileNumber
+                  }
+                >
+                  {patient.id}
+                </Text>
+
+                <Text
+                  style={styles.createdText}
+                >
+                  Created {patient.created}
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.assignmentContainer
+                }
+              >
+                <Text
+                  style={styles.doctorText}
+                >
+                  {patient.doctor}
+                </Text>
+
+                <Text
+                  style={
+                    patient.status ===
+                    'Assigned'
+                      ? styles.assignedText
+                      : styles.unassignedText
+                  }
+                >
+                  {patient.status}
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.smallButton}
+                onPress={() =>
+                  openAssignPatient(
+                    patient
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.smallButtonText
+                  }
+                >
+                  Assign
+                </Text>
+              </Pressable>
+            </View>
+          )
+        )}
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // SEARCH PATIENT
+  // ------------------------------------------------
+
+  const renderSearchPatient = () => (
+    <>
+      {renderHeader(
+        'Search Patient',
+        'Search using the patient file number'
+      )}
+
+      <View style={styles.privacyBanner}>
+        <Text style={styles.privacyIcon}>
+          🔒
+        </Text>
+
+        <View
+          style={styles.privacyTextContainer}
+        >
+          <Text style={styles.privacyTitle}>
+            Restricted Patient Information
+          </Text>
+
+          <Text style={styles.privacyText}>
+            Only administrative file information
+            is displayed. Personal and clinical
+            information is hidden.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.inputLabel}>
+          Patient File Number
+        </Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Example: CL-0001"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="characters"
+        />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          Patient Files
+        </Text>
+
+        {filteredPatients.length ===
+        0 ? (
+          <Text style={styles.emptyText}>
+            No patient files found.
+          </Text>
+        ) : (
+          filteredPatients.map(
+            (patient) => (
+              <View
+                key={patient.id}
+                style={styles.patientRow}
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.patientFileNumber
+                    }
+                  >
+                    {patient.id}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.createdText
+                    }
+                  >
+                    Created {patient.created}
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.assignmentContainer
+                  }
+                >
+                  <Text
+                    style={
+                      styles.doctorText
+                    }
+                  >
+                    {patient.doctor}
+                  </Text>
+
+                  <Text
+                    style={
+                      patient.status ===
+                      'Assigned'
+                        ? styles.assignedText
+                        : styles.unassignedText
+                    }
+                  >
+                    {patient.status}
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={
+                    styles.smallButton
+                  }
+                  onPress={() =>
+                    openAssignPatient(
+                      patient
+                    )
+                  }
+                >
+                  <Text
+                    style={
+                      styles.smallButtonText
+                    }
+                  >
+                    Assign
+                  </Text>
+                </Pressable>
+              </View>
+            )
+          )
+        )}
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // REGISTER PATIENT
+  // ------------------------------------------------
+
+  const renderRegisterPatient = () => (
+    <>
+      {renderHeader(
+        'Register Patient',
+        'Create a new CARELINK patient file'
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          Patient Registration
+        </Text>
+
+        <Text style={styles.cardSubtitle}>
+          Enter the required information to
+          create a patient file.
+        </Text>
+
+        <Text style={styles.inputLabel}>
+          Patient Name
+        </Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Enter patient name"
+          value={patientName}
+          onChangeText={setPatientName}
+        />
+
+        <Text style={styles.inputLabel}>
+          South African ID Number
+        </Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Enter ID number"
+          value={patientIdNumber}
+          onChangeText={
+            setPatientIdNumber
+          }
+          keyboardType="numeric"
+        />
+
+        <View style={styles.formNote}>
+          <Text
+            style={styles.formNoteText}
+          >
+            🔒 The administrator will only
+            see the generated CARELINK file
+            number after registration.
+          </Text>
+        </View>
+
+        <Pressable
+          style={
+            styles.primaryButtonLarge
+          }
+          onPress={registerPatient}
+        >
+          <Text
+            style={styles.primaryButtonText}
+          >
+            Register Patient
+          </Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // ASSIGN PATIENT
+  // ------------------------------------------------
+
+  const renderAssignPatient = () => (
+    <>
+      {renderHeader(
+        'Assign Patient',
+        'Assign patient files to healthcare workers'
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          Patient Files
+        </Text>
+
+        <Text style={styles.cardSubtitle}>
+          Only file numbers and assignment
+          information are visible.
+        </Text>
+
+        {patients.map((patient) => (
+          <View
+            key={patient.id}
+            style={styles.patientRow}
+          >
+            <View>
+              <Text
+                style={
+                  styles.patientFileNumber
+                }
+              >
+                {patient.id}
+              </Text>
+
+              <Text
+                style={styles.createdText}
+              >
+                {patient.status}
+              </Text>
+            </View>
+
+            <Text style={styles.doctorText}>
+              {patient.doctor}
+            </Text>
+
+            <Pressable
+              style={styles.smallButton}
+              onPress={() =>
+                openAssignPatient(
+                  patient
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.smallButtonText
+                }
+              >
+                Assign
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // VIEW WORKERS
+  // ------------------------------------------------
+
+  const renderWorkers = () => (
+    <>
+      {renderHeader(
+        'Healthcare Workers',
+        'Manage healthcare worker administration'
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          Healthcare Workers
+        </Text>
+
+        <Text style={styles.cardSubtitle}>
+          View healthcare workers and their
+          administrative assignments.
+        </Text>
+
+        {workers.map((worker) => (
+          <View
+            key={worker.id}
+            style={styles.workerRow}
+          >
+            <View
+              style={styles.workerAvatar}
+            >
+              <Text
+                style={
+                  styles.workerAvatarText
+                }
+              >
+                {worker.name.charAt(0)}
+              </Text>
+            </View>
+
+            <View
+              style={styles.workerInfo}
+            >
+              <Text
+                style={styles.workerName}
+              >
+                {worker.name}
+              </Text>
+
+              <Text
+                style={
+                  styles.workerDetails
+                }
+              >
+                {worker.id} • {worker.role}
+              </Text>
+
+              <Text
+                style={
+                  styles.workerDetails
+                }
+              >
+                {worker.facility}
+              </Text>
+
+              <Text
+                style={
+                  styles.workerDetails
+                }
+              >
+                {worker.department}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // OTHER WORKER PAGES
+  // ------------------------------------------------
+
+  const renderAdminModule = (
+    title: string,
+    subtitle: string,
+    description: string
+  ) => (
+    <>
+      {renderHeader(
+        title,
+        subtitle
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          {title}
+        </Text>
+
+        <Text style={styles.cardSubtitle}>
+          {description}
+        </Text>
+
+        <View
+          style={styles.comingSoonBox}
+        >
+          <Text
+            style={styles.comingSoonIcon}
+          >
+            ⚙
+          </Text>
+
+          <Text
+            style={styles.comingSoonTitle}
+          >
+            Administration Module
+          </Text>
+
+          <Text
+            style={styles.comingSoonText}
+          >
+            This section is ready for the
+            next development stage. We will
+            connect it to Supabase and add
+            the required administration
+            controls.
+          </Text>
+        </View>
+      </View>
+    </>
+  );
+
+  // ------------------------------------------------
+  // SCREEN SELECTOR
+  // ------------------------------------------------
+
+  const renderCurrentScreen = () => {
+    switch (screen) {
+      case 'dashboard':
+        return renderDashboard();
+
+      case 'search-patient':
+        return renderSearchPatient();
+
+      case 'register-patient':
+        return renderRegisterPatient();
+
+      case 'assign-patient':
+        return renderAssignPatient();
+
+      case 'view-workers':
+        return renderWorkers();
+
+      case 'create-worker':
+        return (
+          <>
+            {renderHeader(
+              'Create Healthcare Worker',
+              'Create a healthcare worker account for CARELINK'
+            )}
+
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>Worker Details</Text>
+
+              <Text style={styles.inputLabel}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter first name"
+                value={workerFirstName}
+                onChangeText={setWorkerFirstName}
+                autoCapitalize="words"
+              />
+
+              <Text style={styles.inputLabel}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter last name"
+                value={workerLastName}
+                onChangeText={setWorkerLastName}
+                autoCapitalize="words"
+              />
+
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter email address"
+                value={workerEmail}
+                onChangeText={setWorkerEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.inputLabel}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Create temporary password"
+                value={workerPassword}
+                onChangeText={setWorkerPassword}
+                secureTextEntry
+              />
+
+              <Text style={styles.inputLabel}>Role</Text>
+
+              <View style={styles.roleOptions}>
+                {['Doctor', 'Nurse', 'Administrator'].map((role) => (
+                  <Pressable
+                    key={role}
+                    style={[
+                      styles.roleButton,
+                      workerRole === role && styles.roleButtonActive,
+                    ]}
+                    onPress={() => setWorkerRole(role)}
+                  >
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        workerRole === role && styles.roleButtonTextActive,
+                      ]}
+                    >
+                      {role}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={styles.infoBox}>
+                <Text style={styles.infoBoxText}>
+                  The healthcare worker will be given access according to the role
+                  assigned by the administrator.
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.primaryButtonLarge}
+                onPress={() => {
+                  Alert.alert(
+                    'Create Worker',
+                    'The worker form is ready. Database account creation will be connected next.'
+                  );
+                }}
+              >
+                <Text style={styles.primaryButtonText}>Create Worker</Text>
+              </Pressable>
+            </View>
+          </>
+        );
+
+      case 'assign-role':
+        return renderAdminModule(
+          'Assign Role',
+          'Manage healthcare worker roles',
+          'Assign appropriate roles to healthcare workers.'
+        );
+
+      case 'assign-facility':
+        return renderAdminModule(
+          'Assign Facility',
+          'Assign healthcare workers to facilities',
+          'Manage the facility associated with each healthcare worker.'
+        );
+
+      case 'assign-department':
+        return renderAdminModule(
+          'Assign Department',
+          'Manage healthcare worker departments',
+          'Assign healthcare workers to the correct department.'
+        );
+
+      case 'activity-logs':
+        return renderAdminModule(
+          'Activity Logs',
+          'Monitor administrative activity',
+          'View important administrative actions performed in CARELINK.'
+        );
+
+      default:
+        return renderDashboard();
+    }
+  };
+
+  // ------------------------------------------------
+  // MAIN UI
+  // ------------------------------------------------
+
+  return (
+    <View style={styles.container}>
+
+      {/* ================= SIDEBAR ================= */}
+
+      {sidebarOpen && (
+        <View style={styles.sidebar}>
+
+          {/* BRAND */}
+
+          <View>
+            <View
+              style={styles.brandContainer}
+            >
+              <Image
+                source={require('../../assets/sa-government-logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+
+              <View>
+                <Text
+                  style={styles.brandTitle}
+                >
+                  CARELINK
+                </Text>
+
+                <Text
+                  style={styles.brandSubtitle}
+                >
+                  Department of Health
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={styles.divider}
+            />
+
+            <Text
+              style={styles.menuLabel}
+            >
               ADMINISTRATION
             </Text>
+
+            {/* DASHBOARD */}
 
             <Pressable
               style={[
                 styles.navItem,
-                styles.activeNavItem,
+                screen === 'dashboard' &&
+                  styles.navItemActive,
               ]}
+              onPress={() =>
+                navigate('dashboard')
+              }
             >
-              <Text style={styles.navIcon}>⌂</Text>
+              <Text
+                style={styles.navIcon}
+              >
+                ▦
+              </Text>
 
-              <Text style={styles.activeNavText}>
+              <Text
+                style={[
+                  styles.navText,
+                  screen === 'dashboard' &&
+                    styles.navTextActive,
+                ]}
+              >
                 Dashboard
               </Text>
             </Pressable>
 
+            {/* PATIENTS */}
+
             <Pressable
               style={styles.navItem}
               onPress={() =>
-                setShowAddPatient(true)
+                setPatientsOpen(
+                  !patientsOpen
+                )
               }
             >
-              <Text style={styles.navIcon}>+</Text>
+              <Text
+                style={styles.navIcon}
+              >
+                ♙
+              </Text>
 
-              <Text style={styles.navText}>
-                Add Patient
+              <Text
+                style={styles.navText}
+              >
+                Patients
+              </Text>
+
+              <Text
+                style={styles.arrow}
+              >
+                {patientsOpen
+                  ? '⌃'
+                  : '⌄'}
               </Text>
             </Pressable>
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>▤</Text>
+            {patientsOpen && (
+              <View
+                style={styles.subMenu}
+              >
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'search-patient' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'search-patient'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'search-patient' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Search Patient
+                  </Text>
+                </Pressable>
 
-              <Text style={styles.navText}>
-                Patient Files
-              </Text>
-            </Pressable>
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'register-patient' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'register-patient'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'register-patient' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Register Patient
+                  </Text>
+                </Pressable>
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>♙</Text>
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'assign-patient' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'assign-patient'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'assign-patient' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Assign Patient
+                  </Text>
+                </Pressable>
+              </View>
+            )}
 
-              <Text style={styles.navText}>
-                Doctors
-              </Text>
-            </Pressable>
+            {/* HEALTHCARE WORKERS */}
 
-            <Text
-              style={[
-                styles.menuLabel,
-                styles.servicesLabel,
-              ]}
+            <Pressable
+              style={styles.navItem}
+              onPress={() =>
+                setWorkersOpen(
+                  !workersOpen
+                )
+              }
             >
-              SYSTEM
-            </Text>
+              <Text
+                style={styles.navIcon}
+              >
+                ⚕
+              </Text>
 
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>◉</Text>
+              <Text
+                style={styles.navText}
+              >
+                Healthcare Workers
+              </Text>
 
-              <Text style={styles.navText}>
+              <Text
+                style={styles.arrow}
+              >
+                {workersOpen
+                  ? '⌃'
+                  : '⌄'}
+              </Text>
+            </Pressable>
+
+            {workersOpen && (
+              <View
+                style={styles.subMenu}
+              >
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'view-workers' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'view-workers'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'view-workers' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    View Workers
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'create-worker' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'create-worker'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'create-worker' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Create Worker
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'assign-role' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'assign-role'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'assign-role' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Assign Role
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'assign-facility' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'assign-facility'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'assign-facility' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Assign Facility
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.subNavItem,
+                    screen ===
+                      'assign-department' &&
+                      styles.subNavItemActive,
+                  ]}
+                  onPress={() =>
+                    navigate(
+                      'assign-department'
+                    )
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.subNavText,
+                      screen ===
+                        'assign-department' &&
+                        styles.subNavTextActive,
+                    ]}
+                  >
+                    Assign Department
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* ACTIVITY LOGS */}
+
+            <Pressable
+              style={[
+                styles.navItem,
+                screen ===
+                  'activity-logs' &&
+                  styles.navItemActive,
+              ]}
+              onPress={() =>
+                navigate(
+                  'activity-logs'
+                )
+              }
+            >
+              <Text
+                style={styles.navIcon}
+              >
+                ◷
+              </Text>
+
+              <Text
+                style={[
+                  styles.navText,
+                  screen ===
+                    'activity-logs' &&
+                    styles.navTextActive,
+                ]}
+              >
                 Activity Logs
               </Text>
             </Pressable>
-
-            <Pressable style={styles.navItem}>
-              <Text style={styles.navIcon}>⚙</Text>
-
-              <Text style={styles.navText}>
-                Settings
-              </Text>
-            </Pressable>
-
           </View>
-        )}
 
-        {/* SIDEBAR FOOTER */}
+          {/* LOGOUT */}
 
-        {sidebarOpen && (
-          <View style={styles.sidebarFooter}>
-
-            <Text style={styles.secureText}>
-              🔒 Secure Administration
+          <Pressable
+            style={styles.logoutButton}
+            onPress={logout}
+          >
+            <Text
+              style={styles.logoutIcon}
+            >
+              ⇥
             </Text>
 
-            <Text style={styles.versionText}>
-              CARELINK EHR v1.0
+            <Text
+              style={styles.logoutText}
+            >
+              Logout
             </Text>
+          </Pressable>
+        </View>
+      )}
 
-          </View>
-        )}
-
-      </View>
-
-      {/* =========================
-          MAIN AREA
-      ========================= */}
+      {/* ================= MAIN ================= */}
 
       <View style={styles.main}>
 
-        {/* HEADER */}
+        {/* TOP BAR */}
 
-        <View style={styles.header}>
+        <View style={styles.topBar}>
 
-          <View style={styles.headerLeft}>
+          <View
+            style={styles.topBarLeft}
+          >
 
-            {/* MENU BUTTON */}
+            {/* MENU */}
 
             <Pressable
               style={styles.menuButton}
               onPress={() =>
-                setSidebarOpen(!sidebarOpen)
+                setSidebarOpen(
+                  !sidebarOpen
+                )
               }
             >
-              <Text style={styles.menuButtonText}>
+              <Text
+                style={styles.menuIcon}
+              >
                 ☰
               </Text>
             </Pressable>
 
+            {/* COAT OF ARMS ONLY WHEN SIDEBAR HIDDEN */}
+
+            {!sidebarOpen && (
+              <Image
+                source={require('../../assets/sa-government-logo.png')}
+                style={styles.topBarLogo}
+                resizeMode="contain"
+              />
+            )}
+
             <View>
-              <Text style={styles.headerTitle}>
+              <Text
+                style={styles.topBarTitle}
+              >
                 CARELINK
               </Text>
 
-              <Text style={styles.headerSubtitle}>
-                Electronic Health Records
+              <Text
+                style={styles.topBarSubtitle}
+              >
+                Administration Portal
               </Text>
             </View>
-
           </View>
 
-          <View style={styles.headerRight}>
+          {/* ADMIN */}
 
-            <Pressable
-              style={styles.notificationButton}
+          <View
+            style={styles.adminBadge}
+          >
+            <View
+              style={styles.adminCircle}
             >
-              <Text style={styles.notificationIcon}>
-                ♧
+              <Text
+                style={
+                  styles.adminCircleText
+                }
+              >
+                A
               </Text>
-
-              <View style={styles.notificationBadge}>
-                <Text style={styles.badgeText}>
-                  3
-                </Text>
-              </View>
-            </Pressable>
-
-            <View style={styles.profileMini}>
-
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  A
-                </Text>
-              </View>
-
-              <View>
-                <Text style={styles.profileName}>
-                  System Admin
-                </Text>
-
-                <Text style={styles.profileRole}>
-                  Administrator
-                </Text>
-              </View>
-
-              <Text style={styles.chevron}>
-                ⌄
-              </Text>
-
             </View>
-
-          </View>
-
-        </View>
-
-        {/* =========================
-            CONTENT
-        ========================= */}
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-
-          {/* PAGE TITLE */}
-
-          <View style={styles.pageHeader}>
 
             <View>
-              <Text style={styles.pageTitle}>
-                Administration Dashboard
-              </Text>
-
-              <Text style={styles.pageSubtitle}>
-                Manage patient files and doctor assignments
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.addPatientButton}
-              onPress={() =>
-                setShowAddPatient(true)
-              }
-            >
-              <Text style={styles.addPatientButtonText}>
-                + Add Patient
-              </Text>
-            </Pressable>
-
-          </View>
-
-          {/* PRIVACY NOTICE */}
-
-          <View style={styles.privacyBanner}>
-
-            <View style={styles.infoCircle}>
-              <Text style={styles.infoText}>
-                i
-              </Text>
-            </View>
-
-            <View style={styles.privacyTextArea}>
-
-              <Text style={styles.privacyTitle}>
-                Patient Information Restricted
-              </Text>
-
-              <Text style={styles.privacyDescription}>
-                Administrators can create patient files and
-                assign patients to healthcare workers. Personal
-                and clinical patient information is not displayed
-                in the administration dashboard.
-              </Text>
-
-            </View>
-
-          </View>
-
-          {/* =========================
-              STATISTICS
-          ========================= */}
-
-          <View style={styles.statsGrid}>
-
-            <AdminStat
-              icon="♙"
-              number={String(patients.length)}
-              label="Total Patient Files"
-              detail="Registered patients"
-              background="#EFF6FF"
-              color="#2563EB"
-            />
-
-            <AdminStat
-              icon="✓"
-              number={String(assignedCount)}
-              label="Assigned Patients"
-              detail="Assigned to doctors"
-              background="#ECFDF5"
-              color="#059669"
-            />
-
-            <AdminStat
-              icon="!"
-              number={String(unassignedCount)}
-              label="Awaiting Assignment"
-              detail="Needs doctor assignment"
-              background="#FFF7ED"
-              color="#EA580C"
-            />
-
-            <AdminStat
-              icon="♙"
-              number="4"
-              label="Active Doctors"
-              detail="Currently available"
-              background="#F5F3FF"
-              color="#7C3AED"
-            />
-
-          </View>
-
-          {/* =========================
-              PATIENT FILES
-          ========================= */}
-
-          <View style={styles.patientCard}>
-
-            <View style={styles.cardHeader}>
-
-              <View>
-                <Text style={styles.cardTitle}>
-                  Patient Files
-                </Text>
-
-                <Text style={styles.cardSubtitle}>
-                  File numbers and doctor assignments
-                </Text>
-              </View>
-
-              <Text style={styles.restrictedLabel}>
-                🔒 Restricted View
-              </Text>
-
-            </View>
-
-            {/* SEARCH */}
-
-            <View style={styles.searchContainer}>
-
-              <Text style={styles.searchIcon}>
-                ⌕
-              </Text>
-
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search by patient file number..."
-                placeholderTextColor="#94A3B8"
-                style={styles.searchInput}
-              />
-
-            </View>
-
-            {/* TABLE HEADER */}
-
-            <View style={styles.tableHeader}>
-
-              <Text style={[
-                styles.tableHeaderText,
-                styles.fileColumn,
-              ]}>
-                FILE NUMBER
-              </Text>
-
-              <Text style={[
-                styles.tableHeaderText,
-                styles.doctorColumn,
-              ]}>
-                ASSIGNED DOCTOR
-              </Text>
-
-              <Text style={[
-                styles.tableHeaderText,
-                styles.statusColumn,
-              ]}>
-                STATUS
-              </Text>
-
-              <Text style={[
-                styles.tableHeaderText,
-                styles.dateColumn,
-              ]}>
-                CREATED
-              </Text>
-
-              <Text style={[
-                styles.tableHeaderText,
-                styles.actionColumn,
-              ]}>
-                ACTION
-              </Text>
-
-            </View>
-
-            {/* PATIENT ROWS */}
-
-            {filteredPatients.map((patient) => (
-
-              <View
-                key={patient.id}
-                style={styles.tableRow}
+              <Text
+                style={styles.adminName}
               >
+                Administrator
+              </Text>
 
-                {/* FILE NUMBER */}
+              <Text
+                style={styles.adminRole}
+              >
+                System Administrator
+              </Text>
+            </View>
+          </View>
+        </View>
 
-                <View style={styles.fileColumn}>
+        {/* PAGE */}
 
-                  <View style={styles.fileNumberContainer}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={
+            styles.contentContainer
+          }
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          {renderCurrentScreen()}
+        </ScrollView>
+      </View>
 
-                    <View style={styles.fileIcon}>
-                      <Text style={styles.fileIconText}>
-                        ▤
-                      </Text>
-                    </View>
+      {/* SUCCESS MESSAGE */}
 
-                    <Text style={styles.fileNumber}>
-                      {patient.id}
-                    </Text>
+      {successMessage !== '' && (
+        <View
+          style={styles.successToast}
+        >
+          <Text
+            style={styles.successIcon}
+          >
+            ✓
+          </Text>
 
-                  </View>
+          <Text
+            style={styles.successText}
+          >
+            {successMessage}
+          </Text>
+        </View>
+      )}
 
-                </View>
+      {/* ASSIGN PATIENT MODAL */}
 
-                {/* DOCTOR */}
+      <Modal
+        visible={showAssignModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setShowAssignModal(false)
+        }
+      >
+        <View
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modal}>
 
-                <View style={styles.doctorColumn}>
+            <Text
+              style={styles.modalTitle}
+            >
+              Assign Patient
+            </Text>
 
-                  <Text style={styles.doctorText}>
-                    {patient.doctor}
-                  </Text>
-
-                </View>
-
-                {/* STATUS */}
-
-                <View style={styles.statusColumn}>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      patient.status === 'Assigned'
-                        ? styles.assignedBadge
-                        : styles.unassignedBadge,
-                    ]}
-                  >
-
-                    <View
-                      style={[
-                        styles.statusDot,
-                        patient.status === 'Assigned'
-                          ? styles.assignedDot
-                          : styles.unassignedDot,
-                      ]}
-                    />
-
-                    <Text
-                      style={[
-                        styles.statusText,
-                        patient.status === 'Assigned'
-                          ? styles.assignedText
-                          : styles.unassignedText,
-                      ]}
-                    >
-                      {patient.status}
-                    </Text>
-
-                  </View>
-
-                </View>
-
-                {/* DATE */}
-
-                <View style={styles.dateColumn}>
-
-                  <Text style={styles.dateText}>
-                    {patient.created}
-                  </Text>
-
-                </View>
-
-                {/* ACTION */}
-
-                <View style={styles.actionColumn}>
-
-                  <Pressable
-                    style={styles.assignButton}
-                    onPress={() =>
-                      openAssignDoctor(patient)
-                    }
-                  >
-                    <Text style={styles.assignButtonText}>
-                      {patient.status === 'Assigned'
-                        ? 'Reassign'
-                        : 'Assign Doctor'}
-                    </Text>
-                  </Pressable>
-
-                </View>
-
-              </View>
-
-            ))}
-
-            {filteredPatients.length === 0 && (
-              <View style={styles.emptyState}>
-
-                <Text style={styles.emptyIcon}>
-                  ⌕
+            {selectedPatient && (
+              <View
+                style={
+                  styles.selectedFileBox
+                }
+              >
+                <Text
+                  style={
+                    styles.selectedFileLabel
+                  }
+                >
+                  Patient File
                 </Text>
 
-                <Text style={styles.emptyTitle}>
-                  No patient files found
+                <Text
+                  style={
+                    styles.selectedFileNumber
+                  }
+                >
+                  {selectedPatient.id}
                 </Text>
-
-                <Text style={styles.emptyText}>
-                  Try searching for another file number.
-                </Text>
-
               </View>
             )}
 
-          </View>
-
-          {/* =========================
-              DOCTOR ASSIGNMENT
-          ========================= */}
-
-          <View style={styles.assignmentInfo}>
-
-            <View style={styles.assignmentIcon}>
-              <Text style={styles.assignmentIconText}>
-                ♙
-              </Text>
-            </View>
-
-            <View style={styles.assignmentInfoText}>
-
-              <Text style={styles.assignmentTitle}>
-                Doctor Assignment
-              </Text>
-
-              <Text style={styles.assignmentDescription}>
-                Assign patient files to doctors without exposing
-                personal or clinical patient information.
-              </Text>
-
-            </View>
-
-          </View>
-
-          {/* FOOTER */}
-
-          <View style={styles.footer}>
-
-            <Text style={styles.footerText}>
-              CARELINK Electronic Health Records System
+            <Text
+              style={styles.inputLabel}
+            >
+              Select Healthcare Worker
             </Text>
 
-            <Text style={styles.footerText}>
-              Department of Health – Republic of South Africa
-            </Text>
-
-          </View>
-
-        </ScrollView>
-
-      </View>
-
-      {/* =========================
-          ADD PATIENT MODAL
-      ========================= */}
-
-      <Modal
-        visible={showAddPatient}
-        transparent
-        animationType="fade"
-        onRequestClose={() =>
-          setShowAddPatient(false)
-        }
-      >
-
-        <View style={styles.modalOverlay}>
-
-          <View style={styles.modal}>
-
-            <View style={styles.modalHeader}>
-
-              <View>
-                <Text style={styles.modalTitle}>
-                  Register New Patient
-                </Text>
-
-                <Text style={styles.modalSubtitle}>
-                  Create a new CARELINK patient file
-                </Text>
-              </View>
-
+            {doctors.map((doctor) => (
               <Pressable
+                key={doctor}
+                style={[
+                  styles.doctorOption,
+                  selectedDoctor ===
+                    doctor &&
+                    styles.doctorOptionSelected,
+                ]}
                 onPress={() =>
-                  setShowAddPatient(false)
+                  setSelectedDoctor(
+                    doctor
+                  )
                 }
               >
-                <Text style={styles.closeButton}>
-                  ×
-                </Text>
-              </Pressable>
-
-            </View>
-
-            <View style={styles.modalPrivacyNotice}>
-
-              <Text style={styles.modalPrivacyTitle}>
-                🔒 Restricted Information
-              </Text>
-
-              <Text style={styles.modalPrivacyText}>
-                Registration information is used only to create
-                the patient file. After registration, administrators
-                will only see the generated file number.
-              </Text>
-
-            </View>
-
-            <Text style={styles.inputLabel}>First Name</Text>
-
-<TextInput
-  value={patientFirstName}
-  onChangeText={setPatientFirstName}
-  placeholder="Enter first name"
-  placeholderTextColor="#94A3B8"
-  style={styles.input}
-/>
-
-<Text style={styles.inputLabel}>Last Name</Text>
-
-<TextInput
-  value={patientLastName}
-  onChangeText={setPatientLastName}
-  placeholder="Enter last name"
-  placeholderTextColor="#94A3B8"
-  style={styles.input}
-/>
-
-            <Text style={styles.inputLabel}>
-              South African ID Number
-            </Text>
-
-            <TextInput
-              value={patientIdNumber}
-              onChangeText={setPatientIdNumber}
-              placeholder="Enter ID number"
-              placeholderTextColor="#94A3B8"
-              keyboardType="numeric"
-              secureTextEntry
-              style={styles.input}
-            />
-
-            <View style={styles.modalButtons}>
-
-             <Pressable
-  style={[
-    styles.createButton,
-    (!patientFirstName.trim() ||
-      !patientLastName.trim() ||
-      !patientIdNumber.trim()) &&
-      styles.disabledButton,
-  ]}
-  disabled={
-    !patientFirstName.trim() ||
-    !patientLastName.trim() ||
-    !patientIdNumber.trim()
-  }
-  onPress={addPatient}
->
-                <Text style={styles.createButtonText}>
-                  Create Patient File
-                </Text>
-              </Pressable>
-
-            </View>
-
-          </View>
-
-        </View>
-
-      </Modal>
-
-      {/* =========================
-          ASSIGN DOCTOR MODAL
-      ========================= */}
-
-      <Modal
-        visible={showAssign}
-        transparent
-        animationType="fade"
-        onRequestClose={() =>
-          setShowAssign(false)
-        }
-      >
-
-        <View style={styles.modalOverlay}>
-
-          <View style={styles.modal}>
-
-            <View style={styles.modalHeader}>
-
-              <View>
-                <Text style={styles.modalTitle}>
-                  Assign Doctor
-                </Text>
-
-                <Text style={styles.modalSubtitle}>
-                  Assign a healthcare worker to this file
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  setShowAssign(false)
-                }
-              >
-                <Text style={styles.closeButton}>
-                  ×
-                </Text>
-              </Pressable>
-
-            </View>
-
-            <View style={styles.selectedFile}>
-
-              <Text style={styles.selectedFileLabel}>
-                PATIENT FILE
-              </Text>
-
-              <Text style={styles.selectedFileNumber}>
-                {selectedPatient?.id}
-              </Text>
-
-            </View>
-
-            <Text style={styles.inputLabel}>
-              Select Doctor
-            </Text>
-
-            <View style={styles.doctorOptions}>
-
-              {doctors.map((doctor) => (
-
-                <Pressable
-                  key={doctor}
+                <Text
                   style={[
-                    styles.doctorOption,
-                    selectedDoctor === doctor &&
-                      styles.selectedDoctorOption,
+                    styles.doctorOptionText,
+                    selectedDoctor ===
+                      doctor &&
+                      styles.doctorOptionTextSelected,
                   ]}
-                  onPress={() =>
-                    setSelectedDoctor(doctor)
+                >
+                  {doctor}
+                </Text>
+
+                {selectedDoctor ===
+                  doctor && (
+                  <Text
+                    style={styles.checkMark}
+                  >
+                    ✓
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+
+            <View
+              style={styles.modalButtons}
+            >
+              <Pressable
+                style={
+                  styles.cancelButton
+                }
+                onPress={() =>
+                  setShowAssignModal(
+                    false
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.cancelButtonText
                   }
                 >
-
-                  <View
-                    style={[
-                      styles.radio,
-                      selectedDoctor === doctor &&
-                        styles.radioSelected,
-                    ]}
-                  >
-
-                    {selectedDoctor === doctor && (
-                      <View
-                        style={styles.radioInner}
-                      />
-                    )}
-
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.doctorOptionText,
-                      selectedDoctor === doctor &&
-                        styles.selectedDoctorText,
-                    ]}
-                  >
-                    {doctor}
-                  </Text>
-
-                </Pressable>
-
-              ))}
-
-            </View>
-
-            <View style={styles.modalButtons}>
-
-              <Pressable
-                style={styles.cancelButton}
-                onPress={() =>
-                  setShowAssign(false)
-                }
-              >
-                <Text style={styles.cancelButtonText}>
                   Cancel
                 </Text>
               </Pressable>
 
               <Pressable
-                style={[
-                  styles.createButton,
-                  !selectedDoctor &&
-                    styles.disabledButton,
-                ]}
-                disabled={!selectedDoctor}
-                onPress={assignDoctor}
+                style={
+                  styles.assignButton
+                }
+                onPress={assignPatient}
               >
-                <Text style={styles.createButtonText}>
-                  Assign Doctor
+                <Text
+                  style={
+                    styles.assignButtonText
+                  }
+                >
+                  Assign Patient
                 </Text>
               </Pressable>
-
             </View>
-
           </View>
-
         </View>
-
       </Modal>
-
-      {/* =========================
-          SUCCESS MESSAGE
-      ========================= */}
-
-      {successMessage !== '' && (
-
-        <View style={styles.successToast}>
-
-          <View style={styles.successCircle}>
-            <Text style={styles.successCheck}>
-              ✓
-            </Text>
-          </View>
-
-          <Text style={styles.successText}>
-            {successMessage}
-          </Text>
-
-        </View>
-
-      )}
-
     </View>
   );
 }
-
-
-/* =========================
-   ADMIN STAT
-========================= */
-
-function AdminStat({
-  icon,
-  number,
-  label,
-  detail,
-  background,
-  color,
-}: {
-  icon: string;
-  number: string;
-  label: string;
-  detail: string;
-  background: string;
-  color: string;
-}) {
-  return (
-    <View style={styles.statCard}>
-
-      <View
-        style={[
-          styles.statIcon,
-          { backgroundColor: background },
-        ]}
-      >
-        <Text
-          style={[
-            styles.statIconText,
-            { color },
-          ]}
-        >
-          {icon}
-        </Text>
-      </View>
-
-      <Text style={styles.statNumber}>
-        {number}
-      </Text>
-
-      <Text style={styles.statLabel}>
-        {label}
-      </Text>
-
-      <Text
-        style={[
-          styles.statDetail,
-          { color },
-        ]}
-      >
-        {detail}
-      </Text>
-
-    </View>
-  );
-}
-
 
 const styles = StyleSheet.create({
-
-  /* =====================================================
-     APP
-  ===================================================== */
-
-  appContainer: {
+  container: {
     flex: 1,
     flexDirection: 'row',
     backgroundColor: '#F8FAFC',
   },
 
-  /* =====================================================
-     SIDEBAR
-  ===================================================== */
+  /* SIDEBAR */
 
   sidebar: {
-    width: 245,
+    width: 270,
     backgroundColor: '#0F2A43',
-    paddingVertical: 24,
-    paddingHorizontal: 18,
+    paddingTop: 24,
+    paddingBottom: 20,
+    paddingHorizontal: 16,
     justifyContent: 'space-between',
   },
 
-  sidebarCollapsed: {
-    width: 82,
-    paddingHorizontal: 12,
-  },
-
-  logoArea: {
+  brandContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    paddingHorizontal: 8,
+    marginBottom: 20,
   },
 
-  governmentLogo: {
-    width: 70,
-    height: 70,
-    marginBottom: 10,
+  logo: {
+    width: 48,
+    height: 58,
+    marginRight: 10,
   },
 
-  governmentLogoCollapsed: {
-    width: 55,
-    height: 55,
-    marginTop: 8,
-  },
-
-  logoTextArea: {
-    alignItems: 'center',
-  },
-
-  carelinkText: {
+  brandTitle: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '800',
     letterSpacing: 1,
   },
 
-  logoSubtitle: {
-    color: '#CBD5E1',
+  brandSubtitle: {
+    color: '#B8C7D9',
     fontSize: 10,
     marginTop: 3,
   },
 
-  departmentText: {
-    color: '#94A3B8',
-    fontSize: 9,
-    marginTop: 5,
-  },
-
-  sidebarMenu: {
-    flex: 1,
+  divider: {
+    height: 1,
+    backgroundColor: '#29435C',
+    marginBottom: 20,
   },
 
   menuLabel: {
-    color: '#64748B',
-    fontSize: 9,
-    fontWeight: '800',
+    color: '#7891A8',
+    fontSize: 10,
+    fontWeight: '700',
     letterSpacing: 1,
-    marginLeft: 12,
     marginBottom: 8,
-  },
-
-  servicesLabel: {
-    marginTop: 25,
+    paddingHorizontal: 10,
   },
 
   navItem: {
-    height: 45,
+    minHeight: 46,
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1281,74 +1786,102 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
-  activeNavItem: {
+  navItemActive: {
     backgroundColor: '#1D4ED8',
   },
 
   navIcon: {
     width: 28,
-    color: '#94A3B8',
+    color: '#D8E4F0',
     fontSize: 18,
-    textAlign: 'center',
-  },
-
-  activeNavText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 3,
   },
 
   navText: {
-    color: '#CBD5E1',
+    color: '#D8E4F0',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  navTextActive: {
+    color: '#FFFFFF',
+  },
+
+  arrow: {
+    color: '#AFC2D5',
+    fontSize: 16,
+  },
+
+  subMenu: {
+    marginLeft: 28,
+    marginBottom: 6,
+    borderLeftWidth: 1,
+    borderLeftColor: '#38536B',
+  },
+
+  subNavItem: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingLeft: 16,
+    borderRadius: 6,
+    marginBottom: 2,
+  },
+
+  subNavItemActive: {
+    backgroundColor: '#173C61',
+  },
+
+  subNavText: {
+    color: '#B8C7D9',
     fontSize: 13,
-    marginLeft: 3,
   },
 
-  sidebarFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#1E3A56',
-    paddingTop: 15,
+  subNavTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
-  secureText: {
-    color: '#94A3B8',
-    fontSize: 9,
-    textAlign: 'center',
+  logoutButton: {
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#39546D',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    marginTop: 20,
   },
 
-  versionText: {
-    color: '#64748B',
-    fontSize: 8,
-    textAlign: 'center',
-    marginTop: 5,
+  logoutIcon: {
+    color: '#FCA5A5',
+    fontSize: 20,
+    marginRight: 12,
   },
 
-  /* =====================================================
-     MAIN AREA
-  ===================================================== */
+  logoutText: {
+    color: '#FCA5A5',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  /* MAIN */
 
   main: {
     flex: 1,
-    minWidth: 0,
   },
 
-  /* =====================================================
-     HEADER
-  ===================================================== */
-
-  header: {
+  topBar: {
     height: 76,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    paddingHorizontal: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 30,
   },
 
-  headerLeft: {
+  topBarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -1357,132 +1890,87 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 14,
   },
 
-  menuButtonText: {
+  menuIcon: {
     color: '#0F2A43',
-    fontSize: 24,
-    fontWeight: '600',
-  },
-
-  headerTitle: {
-    color: '#0F2A43',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-
-  headerSubtitle: {
-    color: '#94A3B8',
-    fontSize: 10,
-    marginTop: 2,
-  },
-
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    marginRight: 18,
-  },
-
-  notificationIcon: {
-    color: '#475569',
-    fontSize: 19,
-  },
-
-  notificationBadge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 22,
     fontWeight: '700',
   },
 
-  profileMini: {
+  topBarLogo: {
+    width: 42,
+    height: 48,
+    marginRight: 12,
+  },
+
+  topBarTitle: {
+    color: '#0F2A43',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+
+  topBarSubtitle: {
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  adminBadge: {
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#DBEAFE',
+  adminCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E0E7FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
 
-  avatarText: {
-    color: '#2563EB',
-    fontSize: 15,
+  adminCircleText: {
+    color: '#1D4ED8',
     fontWeight: '800',
   },
 
-  profileName: {
-    color: '#0F172A',
-    fontSize: 12,
+  adminName: {
+    color: '#0F2A43',
+    fontSize: 13,
     fontWeight: '700',
   },
 
-  profileRole: {
-    color: '#94A3B8',
+  adminRole: {
+    color: '#64748B',
     fontSize: 10,
     marginTop: 2,
   },
 
-  chevron: {
-    color: '#94A3B8',
-    fontSize: 17,
-    marginLeft: 9,
-  },
-
-  /* =====================================================
-     CONTENT
-  ===================================================== */
-
-  scrollView: {
+  content: {
     flex: 1,
   },
 
-  content: {
+  contentContainer: {
     padding: 30,
-    paddingBottom: 50,
+    paddingBottom: 60,
   },
 
+  /* PAGE HEADER */
+
   pageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 24,
   },
 
   pageTitle: {
-    color: '#0F172A',
-    fontSize: 25,
-    fontWeight: '700',
+    color: '#0F2A43',
+    fontSize: 26,
+    fontWeight: '800',
   },
 
   pageSubtitle: {
@@ -1491,437 +1979,401 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
-  addPatientButton: {
-    backgroundColor: '#1D4ED8',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-
-  addPatientButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  /* =====================================================
-     PRIVACY BANNER
-  ===================================================== */
+  /* PRIVACY */
 
   privacyBanner: {
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
-    borderRadius: 9,
+    borderRadius: 10,
     padding: 16,
     flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 22,
   },
 
-  infoCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
+  privacyIcon: {
+    fontSize: 22,
+    marginRight: 12,
   },
 
-  infoText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-
-  privacyTextArea: {
+  privacyTextContainer: {
     flex: 1,
-    marginLeft: 12,
   },
 
   privacyTitle: {
-    color: '#1E3A8A',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#1E40AF',
+    fontWeight: '800',
+    fontSize: 13,
+    marginBottom: 4,
   },
 
-  privacyDescription: {
+  privacyText: {
     color: '#475569',
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
   },
 
-  /* =====================================================
-     STATISTICS
-  ===================================================== */
+  /* STATS */
 
-  statsGrid: {
+  statsRow: {
     flexDirection: 'row',
-    marginBottom: 25,
+    gap: 14,
+    marginBottom: 24,
   },
 
   statCard: {
     flex: 1,
-    minHeight: 145,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 11,
-    padding: 18,
-    marginRight: 15,
-  },
-
-  statIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  statIconText: {
-    fontSize: 18,
-    fontWeight: '700',
+    borderRadius: 10,
+    padding: 20,
   },
 
   statNumber: {
-    color: '#0F172A',
-    fontSize: 25,
-    fontWeight: '700',
+    color: '#0F2A43',
+    fontSize: 27,
+    fontWeight: '800',
   },
 
   statLabel: {
     color: '#64748B',
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 5,
   },
 
-  statDetail: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginTop: 7,
-  },
+  /* CARDS */
 
-  /* =====================================================
-     PATIENT CARD
-  ===================================================== */
-
-  patientCard: {
+  card: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 11,
-    padding: 20,
+    padding: 22,
+    marginBottom: 20,
   },
 
   cardHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 18,
   },
 
   cardTitle: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '700',
+    color: '#0F2A43',
+    fontSize: 17,
+    fontWeight: '800',
   },
 
   cardSubtitle: {
-    color: '#94A3B8',
-    fontSize: 10,
-    marginTop: 3,
-  },
-
-  restrictedLabel: {
     color: '#64748B',
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 5,
+    marginBottom: 18,
   },
 
-  /* =====================================================
-     SEARCH
-  ===================================================== */
+  /* BUTTONS */
 
-  searchContainer: {
-    height: 42,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+  primaryButton: {
+    backgroundColor: '#1D4ED8',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    marginBottom: 15,
-    backgroundColor: '#FFFFFF',
   },
 
-  searchIcon: {
-    color: '#94A3B8',
-    fontSize: 18,
-    marginRight: 8,
-  },
-
-  searchInput: {
-    flex: 1,
-    color: '#0F172A',
-    fontSize: 11,
-  },
-
-  /* =====================================================
-     TABLE
-  ===================================================== */
-
-  tableHeader: {
-    minHeight: 42,
-    backgroundColor: '#F8FAFC',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-
-  tableHeaderText: {
-    color: '#64748B',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-
-  tableRow: {
-    minHeight: 70,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-  },
-
-  fileColumn: {
-    flex: 1.4,
-  },
-
-  doctorColumn: {
-    flex: 1.4,
-  },
-
-  statusColumn: {
-    flex: 1.2,
-  },
-
-  dateColumn: {
-    flex: 1.1,
-  },
-
-  actionColumn: {
-    flex: 1.3,
-    alignItems: 'flex-end',
-  },
-
-  fileNumberContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  fileIcon: {
-    width: 32,
-    height: 32,
+  primaryButtonLarge: {
+    backgroundColor: '#1D4ED8',
+    paddingVertical: 13,
     borderRadius: 7,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+
+  smallButton: {
     backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 9,
-  },
-
-  fileIconText: {
-    color: '#2563EB',
-    fontSize: 14,
-  },
-
-  fileNumber: {
-    color: '#1D4ED8',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
-  doctorText: {
-    color: '#334155',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  /* =====================================================
-     STATUS
-  ===================================================== */
-
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-
-  assignedBadge: {
-    backgroundColor: '#ECFDF5',
-  },
-
-  unassignedBadge: {
-    backgroundColor: '#FFF7ED',
-  },
-
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    marginRight: 5,
-  },
-
-  assignedDot: {
-    backgroundColor: '#059669',
-  },
-
-  unassignedDot: {
-    backgroundColor: '#EA580C',
-  },
-
-  statusText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-
-  assignedText: {
-    color: '#047857',
-  },
-
-  unassignedText: {
-    color: '#C2410C',
-  },
-
-  dateText: {
-    color: '#64748B',
-    fontSize: 10,
-  },
-
-  /* =====================================================
-     ASSIGN BUTTON
-  ===================================================== */
-
-  assignButton: {
     borderWidth: 1,
     borderColor: '#BFDBFE',
-    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
     borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
   },
 
-  assignButtonText: {
+  smallButtonText: {
     color: '#1D4ED8',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
   },
 
-  /* =====================================================
-     EMPTY STATE
-  ===================================================== */
+  /* PATIENT */
 
-  emptyState: {
+  patientRow: {
+    minHeight: 70,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 45,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
 
-  emptyIcon: {
-    fontSize: 30,
-    color: '#94A3B8',
+  patientFileNumber: {
+    color: '#0F2A43',
+    fontSize: 14,
+    fontWeight: '800',
   },
 
-  emptyTitle: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-
-  emptyText: {
+  createdText: {
     color: '#94A3B8',
     fontSize: 10,
     marginTop: 4,
   },
 
-  /* =====================================================
-     ASSIGNMENT INFO
-  ===================================================== */
+  assignmentContainer: {
+    alignItems: 'center',
+    minWidth: 130,
+  },
 
-  assignmentInfo: {
-    marginTop: 20,
-    backgroundColor: '#F8FAFC',
+  doctorText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  assignedText: {
+    color: '#15803D',
+    fontSize: 10,
+    marginTop: 3,
+    fontWeight: '700',
+  },
+
+  unassignedText: {
+    color: '#B45309',
+    fontSize: 10,
+    marginTop: 3,
+    fontWeight: '700',
+  },
+
+  /* CREATE WORKER FORM */
+
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    maxWidth: 700,
+    width: '100%',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 10,
-    padding: 18,
+    marginBottom: 20,
+  },
+
+  formTitle: {
+    color: '#0F2A43',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+
+  roleOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 4,
+  },
+
+  roleButton: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+  },
+
+  roleButtonActive: {
+    backgroundColor: '#1D4ED8',
+    borderColor: '#1D4ED8',
+  },
+
+  roleButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+
+  roleButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  infoBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 14,
+    marginTop: 22,
+    marginBottom: 2,
+  },
+
+  infoBoxText: {
+    color: '#475569',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+
+  /* FORM */
+
+  inputLabel: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 7,
+    marginTop: 12,
+  },
+
+  input: {
+    height: 45,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 7,
+    paddingHorizontal: 13,
+    color: '#0F2A43',
+    backgroundColor: '#FFFFFF',
+    fontSize: 13,
+  },
+
+  formNote: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 7,
+    padding: 13,
+    marginTop: 18,
+  },
+
+  formNoteText: {
+    color: '#64748B',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+
+  emptyText: {
+    color: '#64748B',
+    fontSize: 13,
+    paddingVertical: 20,
+  },
+
+  /* WORKERS */
+
+  workerRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  assignmentIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 9,
-    backgroundColor: '#EFF6FF',
+  workerAvatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    backgroundColor: '#E0E7FF',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 14,
   },
 
-  assignmentIconText: {
-    color: '#2563EB',
-    fontSize: 19,
+  workerAvatarText: {
+    color: '#1D4ED8',
+    fontSize: 17,
+    fontWeight: '800',
   },
 
-  assignmentInfoText: {
+  workerInfo: {
     flex: 1,
-    marginLeft: 12,
   },
 
-  assignmentTitle: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '700',
+  workerName: {
+    color: '#0F2A43',
+    fontSize: 14,
+    fontWeight: '800',
   },
 
-  assignmentDescription: {
+  workerDetails: {
     color: '#64748B',
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 11,
     marginTop: 3,
   },
 
-  /* =====================================================
-     FOOTER
-  ===================================================== */
+  /* OTHER MODULES */
 
-  footer: {
+  comingSoonBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 30,
     alignItems: 'center',
-    marginTop: 30,
+    marginTop: 10,
   },
 
-  footerText: {
-    color: '#94A3B8',
-    fontSize: 9,
-    marginBottom: 3,
+  comingSoonIcon: {
+    fontSize: 30,
+    marginBottom: 12,
   },
 
-  /* =====================================================
-     MODAL
-  ===================================================== */
+  comingSoonTitle: {
+    color: '#0F2A43',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+
+  comingSoonText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
+    maxWidth: 500,
+  },
+
+  /* SUCCESS */
+
+  successToast: {
+    position: 'absolute',
+    right: 30,
+    bottom: 30,
+    backgroundColor: '#0F2A43',
+    borderRadius: 9,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: 420,
+  },
+
+  successIcon: {
+    color: '#4ADE80',
+    fontSize: 18,
+    fontWeight: '800',
+    marginRight: 10,
+  },
+
+  successText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  /* MODAL */
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor:
+      'rgba(15, 42, 67, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -1932,90 +2384,77 @@ const styles = StyleSheet.create({
     maxWidth: 500,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 24,
-  },
-
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 18,
+    padding: 25,
   },
 
   modalTitle: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-
-  modalSubtitle: {
-    color: '#94A3B8',
-    fontSize: 10,
-    marginTop: 4,
-  },
-
-  closeButton: {
-    color: '#64748B',
-    fontSize: 27,
-    lineHeight: 25,
-  },
-
-  /* =====================================================
-     MODAL PRIVACY
-  ===================================================== */
-
-  modalPrivacyNotice: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    padding: 12,
+    color: '#0F2A43',
+    fontSize: 20,
+    fontWeight: '800',
     marginBottom: 18,
   },
 
-  modalPrivacyTitle: {
-    color: '#334155',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-
-  modalPrivacyText: {
-    color: '#64748B',
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 3,
-  },
-
-  /* =====================================================
-     FORM INPUTS
-  ===================================================== */
-
-  inputLabel: {
-    color: '#334155',
-    fontSize: 10,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-
-  input: {
-    height: 44,
+  selectedFileBox: {
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 7,
-    paddingHorizontal: 12,
-    color: '#0F172A',
-    fontSize: 11,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 14,
     marginBottom: 15,
   },
 
-  /* =====================================================
-     MODAL BUTTONS
-  ===================================================== */
+  selectedFileLabel: {
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+
+  selectedFileNumber: {
+    color: '#1D4ED8',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+
+  doctorOption: {
+    minHeight: 45,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 7,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  doctorOptionSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#1D4ED8',
+  },
+
+  doctorOptionText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  doctorOptionTextSelected: {
+    color: '#1D4ED8',
+    fontWeight: '800',
+  },
+
+  checkMark: {
+    color: '#1D4ED8',
+    fontWeight: '800',
+  },
 
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: 8,
+    gap: 10,
+    marginTop: 20,
   },
 
   cancelButton: {
@@ -2024,158 +2463,24 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     paddingHorizontal: 16,
     paddingVertical: 11,
-    marginRight: 10,
   },
 
   cancelButtonText: {
     color: '#475569',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
 
-  createButton: {
+  assignButton: {
     backgroundColor: '#1D4ED8',
     borderRadius: 7,
     paddingHorizontal: 16,
     paddingVertical: 11,
   },
 
-  disabledButton: {
-    backgroundColor: '#94A3B8',
-  },
-
-  createButtonText: {
+  assignButtonText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
-
-  /* =====================================================
-     ASSIGN DOCTOR
-  ===================================================== */
-
-  selectedFile: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 18,
-  },
-
-  selectedFileLabel: {
-    color: '#64748B',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-
-  selectedFileNumber: {
-    color: '#1D4ED8',
-    fontSize: 17,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-
-  doctorOptions: {
-    marginBottom: 10,
-  },
-
-  doctorOption: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 7,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-
-  selectedDoctorOption: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
-  },
-
-  radio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#94A3B8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-
-  radioSelected: {
-    borderColor: '#2563EB',
-  },
-
-  radioInner: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: '#2563EB',
-  },
-
-  doctorOptionText: {
-    color: '#475569',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  selectedDoctorText: {
-    color: '#1D4ED8',
-  },
-
-  /* =====================================================
-     SUCCESS TOAST
-  ===================================================== */
-
-  successToast: {
-    position: 'absolute',
-    top: 92,
-    right: 25,
-    maxWidth: 360,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    borderRadius: 9,
-    padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 5,
-  },
-
-  successCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#D1FAE5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 9,
-  },
-
-  successCheck: {
-    color: '#059669',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-
-  successText: {
-    color: '#065F46',
-    fontSize: 10,
-    fontWeight: '600',
-    flex: 1,
-  },
-
 });

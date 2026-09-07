@@ -11,7 +11,7 @@ import {
 
 import { useState } from 'react';
 
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -195,9 +195,27 @@ export default function PatientsScreen() {
         'Error',
         'Unable to search for the patient.'
       );
+
     } finally {
       setLoading(false);
     }
+  };
+
+  // =========================================
+  // OPEN FULL PATIENT RECORD
+  // =========================================
+
+  const openPatientRecord = () => {
+    if (!patient) {
+      return;
+    }
+
+    console.log(
+      'OPENING PATIENT RECORD:',
+      patient.id
+    );
+
+    router.push(`/patients/${patient.id}`);
   };
 
   // =========================================
@@ -221,6 +239,7 @@ export default function PatientsScreen() {
       ====================================== */}
 
       <View style={styles.header}>
+
         <Text style={styles.logo}>
           CARELINK
         </Text>
@@ -228,7 +247,9 @@ export default function PatientsScreen() {
         <Text style={styles.systemText}>
           Electronic Health Records
         </Text>
+
       </View>
+
 
       {/* =====================================
           TITLE
@@ -243,6 +264,7 @@ export default function PatientsScreen() {
         ID number to locate their record.
       </Text>
 
+
       {/* =====================================
           SEARCH LABEL
       ====================================== */}
@@ -250,6 +272,7 @@ export default function PatientsScreen() {
       <Text style={styles.inputLabel}>
         South African ID Number
       </Text>
+
 
       {/* =====================================
           ID INPUT
@@ -264,6 +287,7 @@ export default function PatientsScreen() {
         placeholderTextColor="#94a3b8"
         value={idNumber}
         onChangeText={(text) => {
+
           // Only allow numbers
           const numbersOnly =
             text.replace(/[^0-9]/g, '');
@@ -272,17 +296,20 @@ export default function PatientsScreen() {
           setIdNumber(
             numbersOnly.slice(0, 13)
           );
+
         }}
         keyboardType="number-pad"
         maxLength={13}
         editable={!loading}
       />
 
+
       {/* =====================================
           CHARACTER COUNT
       ====================================== */}
 
       <View style={styles.inputFooter}>
+
         <Text style={styles.helperText}>
           Enter exactly 13 digits
         </Text>
@@ -290,7 +317,9 @@ export default function PatientsScreen() {
         <Text style={styles.characterCount}>
           {idNumber.length}/13
         </Text>
+
       </View>
+
 
       {/* =====================================
           SEARCH BUTTON
@@ -305,6 +334,7 @@ export default function PatientsScreen() {
         disabled={loading}
         activeOpacity={0.8}
       >
+
         {loading ? (
           <>
             <ActivityIndicator
@@ -320,7 +350,9 @@ export default function PatientsScreen() {
             Search Patient
           </Text>
         )}
+
       </TouchableOpacity>
+
 
       {/* =====================================
           CLEAR BUTTON
@@ -337,6 +369,7 @@ export default function PatientsScreen() {
         </Pressable>
       )}
 
+
       {/* =====================================
           PATIENT RESULT
       ====================================== */}
@@ -345,8 +378,11 @@ export default function PatientsScreen() {
         <View style={styles.patientCard}>
 
           {/* Result Header */}
+
           <View style={styles.patientHeader}>
+
             <View>
+
               <Text style={styles.patientTitle}>
                 Patient Found
               </Text>
@@ -354,20 +390,29 @@ export default function PatientsScreen() {
               <Text style={styles.patientSubtitle}>
                 CARELINK patient record
               </Text>
+
             </View>
 
             <View style={styles.successBadge}>
+
               <Text style={styles.successBadgeText}>
                 ✓
               </Text>
+
             </View>
+
           </View>
 
+
           {/* Divider */}
+
           <View style={styles.divider} />
 
+
           {/* Name */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
               Full Name
             </Text>
@@ -376,21 +421,38 @@ export default function PatientsScreen() {
               {patient.first_name}{' '}
               {patient.last_name}
             </Text>
+
           </View>
 
-          {/* ID Number */}
+
+          {/* =================================
+              CLICKABLE PATIENT ID
+          ================================== */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
-              ID Number
+              Patient ID Number
             </Text>
 
-            <Text style={styles.value}>
-              {patient.id_number}
-            </Text>
+            <TouchableOpacity
+              onPress={openPatientRecord}
+              activeOpacity={0.6}
+            >
+
+              <Text style={styles.clickablePatientId}>
+                {patient.id_number}
+              </Text>
+
+            </TouchableOpacity>
+
           </View>
+
 
           {/* Date of Birth */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
               Date of Birth
             </Text>
@@ -399,10 +461,14 @@ export default function PatientsScreen() {
               {patient.date_of_birth ||
                 'Not recorded'}
             </Text>
+
           </View>
 
+
           {/* Gender */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
               Gender
             </Text>
@@ -411,10 +477,14 @@ export default function PatientsScreen() {
               {patient.gender ||
                 'Not recorded'}
             </Text>
+
           </View>
 
+
           {/* Phone */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
               Phone Number
             </Text>
@@ -423,10 +493,14 @@ export default function PatientsScreen() {
               {patient.phone_number ||
                 'Not recorded'}
             </Text>
+
           </View>
 
+
           {/* Address */}
+
           <View style={styles.detailRow}>
+
             <Text style={styles.label}>
               Address
             </Text>
@@ -435,21 +509,46 @@ export default function PatientsScreen() {
               {patient.address ||
                 'Not recorded'}
             </Text>
+
           </View>
+
+
+          {/* =================================
+              VIEW FULL RECORD BUTTON
+          ================================== */}
+
+          <TouchableOpacity
+            style={styles.viewRecordButton}
+            onPress={openPatientRecord}
+            activeOpacity={0.8}
+          >
+
+            <Text style={styles.viewRecordButtonText}>
+              View Full Medical Record
+            </Text>
+
+            <Text style={styles.viewRecordArrow}>
+              →
+            </Text>
+
+          </TouchableOpacity>
 
         </View>
       )}
+
 
       {/* =====================================
           SECURITY MESSAGE
       ====================================== */}
 
       <View style={styles.securityMessage}>
+
         <Text style={styles.securityIcon}>
           🔒
         </Text>
 
         <View style={styles.securityContent}>
+
           <Text style={styles.securityTitle}>
             Patient information is protected
           </Text>
@@ -458,12 +557,19 @@ export default function PatientsScreen() {
             Only authorized healthcare workers
             should access patient records.
           </Text>
+
         </View>
+
       </View>
 
     </View>
   );
 }
+
+
+// =========================================
+// STYLES
+// =========================================
 
 const styles = StyleSheet.create({
 
@@ -484,6 +590,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
+
   // =========================================
   // CONTAINER
   // =========================================
@@ -494,6 +601,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     backgroundColor: '#f8fafc',
   },
+
 
   // =========================================
   // HEADER
@@ -516,6 +624,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+
   // =========================================
   // TITLE
   // =========================================
@@ -534,6 +643,7 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     maxWidth: 600,
   },
+
 
   // =========================================
   // INPUT
@@ -561,6 +671,11 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 
+
+  // =========================================
+  // INPUT FOOTER
+  // =========================================
+
   inputFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -578,6 +693,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
   },
+
 
   // =========================================
   // SEARCH BUTTON
@@ -609,6 +725,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
 
+
   // =========================================
   // CLEAR BUTTON
   // =========================================
@@ -624,6 +741,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+
   // =========================================
   // PATIENT CARD
   // =========================================
@@ -636,6 +754,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+
 
   // =========================================
   // PATIENT HEADER
@@ -674,6 +793,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+
   // =========================================
   // DIVIDER
   // =========================================
@@ -683,6 +803,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
     marginVertical: 16,
   },
+
 
   // =========================================
   // PATIENT DETAILS
@@ -704,6 +825,47 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
 
+
+  // =========================================
+  // CLICKABLE PATIENT ID
+  // =========================================
+
+  clickablePatientId: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2563eb',
+    textDecorationLine: 'underline',
+  },
+
+
+  // =========================================
+  // VIEW FULL RECORD BUTTON
+  // =========================================
+
+  viewRecordButton: {
+    marginTop: 8,
+    height: 52,
+    borderRadius: 10,
+    backgroundColor: '#2563eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+
+  viewRecordButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  viewRecordArrow: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+
+
   // =========================================
   // SECURITY MESSAGE
   // =========================================
@@ -717,6 +879,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginTop: 22,
+    marginBottom: 30,
   },
 
   securityIcon: {
@@ -740,4 +903,5 @@ const styles = StyleSheet.create({
     marginTop: 3,
     lineHeight: 16,
   },
+
 });
