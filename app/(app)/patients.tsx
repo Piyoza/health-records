@@ -26,6 +26,10 @@ type Patient = {
   gender: string | null;
   phone_number: string | null;
   address: string | null;
+
+  biometric_reference: string | null;
+  biometric_enrolled: boolean | null;
+  biometric_enrolled_at: string | null;
 };
 
 export default function PatientsScreen() {
@@ -137,7 +141,10 @@ export default function PatientsScreen() {
           date_of_birth,
           gender,
           phone_number,
-          address
+          address,
+          biometric_reference,
+          biometric_enrolled,
+          biometric_enrolled_at
           `
         )
         .eq('id_number', cleanId)
@@ -226,6 +233,67 @@ export default function PatientsScreen() {
     setIdNumber('');
     setPatient(null);
   };
+  const enrollBiometric = async () => {
+  if (!patient) return;
+
+  try {
+    setLoading(true);
+
+    // Create a temporary biometric reference.
+    // A real biometric scanner/service will provide this later.
+    const biometricReference =
+      `BIO-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+    const { error } = await supabase
+      .from('patients')
+      .update({
+        biometric_reference: biometricReference,
+        biometric_enrolled: true,
+        biometric_enrolled_at: new Date().toISOString(),
+      })
+      .eq('id', patient.id);
+
+    if (error) {
+      console.error(
+        'BIOMETRIC ENROLLMENT ERROR:',
+        error.message
+      );
+
+      Alert.alert(
+        'Enrollment failed',
+        'Unable to enroll the patient for biometric verification.'
+      );
+
+      return;
+    }
+
+    // Update the patient currently displayed on screen
+    setPatient({
+      ...patient,
+      biometric_reference: biometricReference,
+      biometric_enrolled: true,
+      biometric_enrolled_at: new Date().toISOString(),
+    });
+
+    Alert.alert(
+      'Biometric enrolled',
+      `${patient.first_name} ${patient.last_name} has been enrolled successfully.`
+    );
+
+  } catch (error) {
+    console.error(
+      'BIOMETRIC ENROLLMENT EXCEPTION:',
+      error
+    );
+
+    Alert.alert(
+      'Error',
+      'Unable to complete biometric enrollment.'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // =========================================
   // PAGE
@@ -511,6 +579,7 @@ export default function PatientsScreen() {
             </Text>
 
           </View>
+          
 
 
           {/* =================================
@@ -535,6 +604,7 @@ export default function PatientsScreen() {
 
         </View>
       )}
+      
 
 
       {/* =====================================
@@ -559,7 +629,6 @@ export default function PatientsScreen() {
           </Text>
 
         </View>
-
       </View>
 
     </View>
