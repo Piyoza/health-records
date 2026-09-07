@@ -6,9 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "health-records",
+
     "ios": {
       "supportsTablet": true
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -19,18 +22,14 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.healthrecords"
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
       "expo-router",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow MediVault to scan patient IDs.",
-          "barcodeScannerEnabled": true
-        }
-      ]
+      "expo-font"
     ]
   }
 }
