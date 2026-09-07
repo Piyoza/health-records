@@ -12,19 +12,12 @@ import { supabase } from '../lib/supabase';
 type AuthContextType = {
   session: Session | null;
   loading: boolean;
-  signIn: (
-    email: string,
-    password: string
-  ) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
-
-  signIn: async () => {},
-
   signOut: async () => {},
 });
 
@@ -42,33 +35,45 @@ export function AuthProvider({
   useEffect(() => {
     let mounted = true;
 
-    async function loadSession() {
+    console.log('AUTH PROVIDER: started');
+
+    // =========================================
+    // INITIAL SESSION
+    // =========================================
+
+    const loadSession = async () => {
+      console.log('AUTH: getting session...');
+
       try {
         const {
           data,
           error,
         } = await supabase.auth.getSession();
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         if (error) {
           console.error(
-            'AUTH SESSION ERROR:',
+            'AUTH GET SESSION ERROR:',
             error.message
           );
 
           setSession(null);
         } else {
           console.log(
-            'INITIAL SESSION:',
+            'AUTH SESSION:',
             data.session
+              ? 'USER IS LOGGED IN'
+              : 'NO USER SESSION'
           );
 
           setSession(data.session);
         }
       } catch (error) {
         console.error(
-          'AUTH SESSION ERROR:',
+          'AUTH SESSION EXCEPTION:',
           error
         );
 
@@ -77,88 +82,99 @@ export function AuthProvider({
         }
       } finally {
         if (mounted) {
+          console.log(
+            'AUTH: setting loading to FALSE'
+          );
+
           setLoading(false);
         }
       }
-    }
+    };
 
     loadSession();
+
+    // =========================================
+    // AUTH STATE LISTENER
+    // =========================================
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
         console.log(
-          'AUTH EVENT:',
+          'AUTH STATE CHANGE:',
           event
         );
 
-        console.log(
-          'AUTH SESSION:',
-          newSession
-        );
+        if (!mounted) {
+          return;
+        }
 
-        if (!mounted) return;
+        // PASSWORD RECOVERY
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log(
+            'AUTH: password recovery session detected'
+          );
+        }
 
         setSession(newSession);
         setLoading(false);
       }
     );
 
+    // =========================================
+    // CLEANUP
+    // =========================================
+
     return () => {
+      console.log(
+        'AUTH PROVIDER: cleanup'
+      );
+
       mounted = false;
+
       subscription.unsubscribe();
     };
   }, []);
 
-  async function signIn(
-    email: string,
-    password: string
-  ) {
-    console.log('AUTH CONTEXT: signing in...');
+  // =========================================
+  // SIGN OUT
+  // =========================================
 
-    const {
-      data,
-      error,
-    } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const signOut = async () => {
+    try {
+      setLoading(true);
 
-    if (error) {
-      console.error(
-        'AUTH CONTEXT LOGIN ERROR:',
-        error.message
+      console.log(
+        'AUTH: signing out...'
       );
 
-      throw error;
+      const { error } =
+        await supabase.auth.signOut();
+
+      if (error) {
+        console.error(
+          'SIGN OUT ERROR:',
+          error.message
+        );
+      }
+
+      setSession(null);
+    } catch (error) {
+      console.error(
+        'SIGN OUT EXCEPTION:',
+        error
+      );
+    } finally {
+      setLoading(false);
     }
-
-    console.log(
-      'AUTH CONTEXT LOGIN SUCCESS:',
-      data.user?.email
-    );
-
-    setSession(data.session);
-  }
-
-  async function signOut() {
-    const { error } =
-      await supabase.auth.signOut();
-
-    if (error) {
-      throw error;
-    }
-
-    setSession(null);
-  }
+  };
 
   return (
     <AuthContext.Provider
       value={{
         session,
         loading,
-        signIn,
         signOut,
       }}
     >
