@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import {
   ActivityIndicator,
   Image,
@@ -8,7 +9,9 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -16,6 +19,21 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { supabase } from '../../lib/supabase';
 
 export default function DashboardScreen() {
+
+  /* ==========================================================
+     RESPONSIVE SCREEN SIZE
+  ========================================================== */
+
+  const { width } = useWindowDimensions();
+
+  const isMobile = width < 600;
+  const isTablet = width >= 600 && width < 1000;
+  const isDesktop = width >= 1000;
+
+  /* ==========================================================
+     STATE
+  ========================================================== */
+
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('');
   const [loading, setLoading] = useState(true);
@@ -24,6 +42,10 @@ export default function DashboardScreen() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [patientId, setPatientId] = useState('');
+
+  /* ==========================================================
+     LOAD USER
+  ========================================================== */
 
   useEffect(() => {
     loadUser();
@@ -37,19 +59,30 @@ export default function DashboardScreen() {
 
       setUserEmail(user?.email ?? '');
       setUserRole(user?.user_metadata?.role ?? 'Healthcare Worker');
+
     } catch (error) {
       console.error('DASHBOARD USER ERROR:', error);
+
     } finally {
       setLoading(false);
     }
   };
+
+  /* ==========================================================
+     SIGN OUT
+  ========================================================== */
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.replace('/(auth)/login');
   };
 
+  /* ==========================================================
+     GET FIRST NAME
+  ========================================================== */
+
   const getFirstName = () => {
+
     if (!userEmail) return 'User';
 
     return userEmail
@@ -58,7 +91,12 @@ export default function DashboardScreen() {
       .replace(/^\w/, (c) => c.toUpperCase());
   };
 
+  /* ==========================================================
+     GET ROLE DISPLAY
+  ========================================================== */
+
   const getRoleDisplay = () => {
+
     if (!userRole) return 'Healthcare Worker';
 
     const roleMap: Record<string, string> = {
@@ -73,83 +111,151 @@ export default function DashboardScreen() {
     return roleMap[userRole.trim().toLowerCase()] ?? userRole;
   };
 
+  /* ==========================================================
+     FINGERPRINT
+  ========================================================== */
+
   const handleFingerprintScan = async () => {
-  try {
-    // Check if the device supports biometric authentication
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
 
-    if (!hasHardware) {
-      alert('This device does not have a fingerprint or biometric sensor.');
-      return;
-    }
+    try {
 
-    // Check if a fingerprint/biometric is enrolled
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      // Check if the device supports biometric authentication
+      const hasHardware =
+        await LocalAuthentication.hasHardwareAsync();
 
-    if (!isEnrolled) {
-      alert(
-        'No fingerprint or biometric is registered on this device. Please register one in your device settings.'
+      if (!hasHardware) {
+
+        alert(
+          'This device does not have a fingerprint or biometric sensor.'
+        );
+
+        return;
+      }
+
+      // Check if a fingerprint/biometric is enrolled
+      const isEnrolled =
+        await LocalAuthentication.isEnrolledAsync();
+
+      if (!isEnrolled) {
+
+        alert(
+          'No fingerprint or biometric is registered on this device. Please register one in your device settings.'
+        );
+
+        return;
+      }
+
+      // Start biometric authentication
+      const result =
+        await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Scan your fingerprint',
+          cancelLabel: 'Cancel',
+          disableDeviceFallback: false,
+        });
+
+      if (result.success) {
+
+        console.log(
+          'Fingerprint authentication successful'
+        );
+
+        alert(
+          'Fingerprint verified successfully!'
+        );
+
+        // Later we will use the biometric result
+        // to find the patient's record.
+
+      } else {
+
+        console.log(
+          'Fingerprint authentication failed:',
+          result
+        );
+
+        alert(
+          'Fingerprint verification was cancelled or unsuccessful.'
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        'FINGERPRINT ERROR:',
+        error
       );
-      return;
+
+      alert(
+        'Unable to start fingerprint verification.'
+      );
     }
+  };
 
-    // Start biometric authentication
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Scan your fingerprint',
-      cancelLabel: 'Cancel',
-      disableDeviceFallback: false,
-    });
-
-    if (result.success) {
-      console.log('Fingerprint authentication successful');
-
-      // For now, show success
-      alert('Fingerprint verified successfully!');
-
-      // Later we will use the biometric result
-      // to find the patient's record.
-    } else {
-      console.log('Fingerprint authentication failed:', result);
-
-      alert('Fingerprint verification was cancelled or unsuccessful.');
-    }
-  } catch (error) {
-    console.error('FINGERPRINT ERROR:', error);
-
-    alert('Unable to start fingerprint verification.');
-  }
-};
+  /* ==========================================================
+     PATIENT SEARCH
+  ========================================================== */
 
   const handlePatientSearch = () => {
+
     if (!patientId.trim()) {
+
       router.push('/(app)/patients');
+
       return;
     }
 
     // You can later replace this with:
     // router.push(`/(app)/patients/${patientId}`)
+
     router.push('/(app)/patients');
   };
 
+  /* ==========================================================
+     LOADING
+  ========================================================== */
+
   if (loading) {
+
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#123B78" />
+
+        <ActivityIndicator
+          size="large"
+          color="#123B78"
+        />
+
       </View>
     );
   }
 
+  /* ==========================================================
+     MAIN DASHBOARD
+  ========================================================== */
+
   return (
-    <View style={styles.appContainer}>
+    <View
+      style={[
+        styles.appContainer,
+        isMobile && styles.mobileAppContainer,
+      ]}
+    >
 
       {/* =====================================================
           SIDEBAR
       ===================================================== */}
 
       {sidebarOpen && (
-        <View style={styles.sidebar}>
+
+        <View
+          style={[
+            styles.sidebar,
+            isMobile && styles.mobileSidebar,
+            isTablet && styles.tabletSidebar,
+          ]}
+        >
 
           {/* SIDEBAR LOGO */}
+
           <View style={styles.sidebarBrand}>
 
             <Image
@@ -159,10 +265,15 @@ export default function DashboardScreen() {
             />
 
             <View style={styles.brandTextContainer}>
-              <Text style={styles.carelinkText}>CARELINK</Text>
+
+              <Text style={styles.carelinkText}>
+                CARELINK
+              </Text>
+
               <Text style={styles.brandSubtitle}>
                 Electronic Health Records
               </Text>
+
             </View>
 
           </View>
@@ -170,9 +281,12 @@ export default function DashboardScreen() {
           <View style={styles.sidebarDivider} />
 
           {/* MAIN MENU */}
+
           <View style={styles.menuSection}>
 
-            <Text style={styles.menuLabel}>MAIN MENU</Text>
+            <Text style={styles.menuLabel}>
+              MAIN MENU
+            </Text>
 
             <SidebarItem
               icon="grid-outline"
@@ -184,7 +298,9 @@ export default function DashboardScreen() {
             <SidebarItem
               icon="people-outline"
               label="Patients"
-              onPress={() => router.push('/(app)/patients')}
+              onPress={() =>
+                router.push('/(app)/patients')
+              }
             />
 
             <SidebarItem
@@ -199,7 +315,12 @@ export default function DashboardScreen() {
               onPress={() => {}}
             />
 
-            <Text style={[styles.menuLabel, styles.servicesLabel]}>
+            <Text
+              style={[
+                styles.menuLabel,
+                styles.servicesLabel,
+              ]}
+            >
               SERVICES
             </Text>
 
@@ -213,12 +334,15 @@ export default function DashboardScreen() {
           </View>
 
           {/* SIDEBAR BOTTOM */}
+
           <View style={styles.sidebarBottom}>
 
             <SidebarItem
               icon="person-outline"
               label="Profile"
-              onPress={() => router.push('/(app)/profile')}
+              onPress={() =>
+                router.push('/(app)/profile')
+              }
             />
 
             <SidebarItem
@@ -228,6 +352,7 @@ export default function DashboardScreen() {
             />
 
           </View>
+
         </View>
       )}
 
@@ -237,29 +362,43 @@ export default function DashboardScreen() {
 
       <View style={styles.main}>
 
-        {/* =====================================================
+        {/* =================================================
             TOP HEADER
-        ===================================================== */}
+        ================================================= */}
 
-        <View style={styles.header}>
+        <View
+          style={[
+            styles.header,
+            isMobile && styles.mobileHeader,
+            isTablet && styles.tabletHeader,
+          ]}
+        >
 
           {/* LEFT HEADER */}
+
           <View style={styles.headerLeft}>
 
             {/* HAMBURGER */}
+
             <Pressable
               style={styles.menuButton}
-              onPress={() => setSidebarOpen(!sidebarOpen)}
+              onPress={() =>
+                setSidebarOpen(!sidebarOpen)
+              }
             >
+
               <Ionicons
                 name="menu-outline"
                 size={28}
                 color="#123B78"
               />
+
             </Pressable>
 
             {/* LOGO WHEN SIDEBAR IS CLOSED */}
+
             {!sidebarOpen && (
+
               <View style={styles.compactBrand}>
 
                 <Image
@@ -269,6 +408,7 @@ export default function DashboardScreen() {
                 />
 
                 <View>
+
                   <Text style={styles.compactCarelink}>
                     CARELINK
                   </Text>
@@ -276,6 +416,7 @@ export default function DashboardScreen() {
                   <Text style={styles.compactSubtitle}>
                     Electronic Health Records
                   </Text>
+
                 </View>
 
               </View>
@@ -284,10 +425,23 @@ export default function DashboardScreen() {
           </View>
 
           {/* RIGHT HEADER */}
-          <View style={styles.headerRight}>
+
+          <View
+            style={[
+              styles.headerRight,
+              isMobile && styles.mobileHeaderRight,
+            ]}
+          >
 
             {/* FACILITY */}
-            <View style={styles.facilityContainer}>
+
+            <View
+              style={[
+                styles.facilityContainer,
+                isMobile && styles.mobileFacility,
+              ]}
+            >
+
               <Text style={styles.facilityLabel}>
                 Facility:
               </Text>
@@ -301,10 +455,15 @@ export default function DashboardScreen() {
                 size={15}
                 color="#172B4D"
               />
+
             </View>
 
             {/* NOTIFICATIONS */}
-            <Pressable style={styles.notificationButton}>
+
+            <Pressable
+              style={styles.notificationButton}
+            >
+
               <Ionicons
                 name="notifications-outline"
                 size={25}
@@ -312,24 +471,31 @@ export default function DashboardScreen() {
               />
 
               <View style={styles.notificationBadge}>
+
                 <Text style={styles.notificationBadgeText}>
-                  3
+                  
                 </Text>
+
               </View>
+
             </Pressable>
 
             {/* USER */}
+
             <View style={styles.userContainer}>
 
               <View style={styles.userAvatar}>
+
                 <Ionicons
                   name="person"
                   size={20}
                   color="#123B78"
                 />
+
               </View>
 
               <View style={styles.userInfo}>
+
                 <Text style={styles.userName}>
                   {getFirstName()}
                 </Text>
@@ -337,31 +503,45 @@ export default function DashboardScreen() {
                 <Text style={styles.userRole}>
                   {getRoleDisplay()}
                 </Text>
+
               </View>
 
-              <Ionicons
-                name="chevron-down"
-                size={15}
-                color="#172B4D"
-              />
+              {!isMobile && (
+                <Ionicons
+                  name="chevron-down"
+                  size={15}
+                  color="#172B4D"
+                />
+              )}
 
             </View>
 
           </View>
+
         </View>
 
-        {/* =====================================================
+        {/* =================================================
             CONTENT
-        ===================================================== */}
+        ================================================= */}
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            isMobile && styles.mobileContent,
+            isTablet && styles.tabletContent,
+          ]}
           showsVerticalScrollIndicator={false}
         >
 
           {/* PAGE TITLE */}
-          <View style={styles.pageHeader}>
+
+          <View
+            style={[
+              styles.pageHeader,
+              isMobile && styles.mobilePageHeader,
+            ]}
+          >
 
             <Text style={styles.pageTitle}>
               Dashboard
@@ -374,14 +554,17 @@ export default function DashboardScreen() {
           </View>
 
           {/* INFORMATION BANNER */}
+
           <View style={styles.infoBanner}>
 
             <View style={styles.infoIcon}>
+
               <Ionicons
                 name="information"
                 size={17}
                 color="#123B78"
               />
+
             </View>
 
             <Text style={styles.infoText}>
@@ -404,18 +587,34 @@ export default function DashboardScreen() {
               Search for a patient using South African ID number or biometric verification.
             </Text>
 
-            <View style={styles.searchArea}>
+            <View
+              style={[
+                styles.searchArea,
+                isMobile && styles.mobileSearchArea,
+              ]}
+            >
 
               {/* ID SEARCH */}
+
               <View style={styles.idSearchSection}>
 
                 <Text style={styles.searchLabel}>
                   Search by ID Number
                 </Text>
 
-                <View style={styles.searchRow}>
+                <View
+                  style={[
+                    styles.searchRow,
+                    isMobile && styles.mobileSearchRow,
+                  ]}
+                >
 
-                  <View style={styles.inputContainer}>
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      isMobile && styles.mobileInputContainer,
+                    ]}
+                  >
 
                     <Ionicons
                       name="person-outline"
@@ -426,7 +625,7 @@ export default function DashboardScreen() {
                     <TextInput
                       value={patientId}
                       onChangeText={setPatientId}
-                      placeholder="Enter South African ID Number"
+                      placeholder="Enter ID Number"
                       placeholderTextColor="#94A3B8"
                       style={styles.patientInput}
                       keyboardType="numeric"
@@ -435,12 +634,17 @@ export default function DashboardScreen() {
                   </View>
 
                   <Pressable
-                    style={styles.searchButton}
+                    style={[
+                      styles.searchButton,
+                      isMobile && styles.mobileSearchButton,
+                    ]}
                     onPress={handlePatientSearch}
                   >
+
                     <Text style={styles.searchButtonText}>
                       Search
                     </Text>
+
                   </Pressable>
 
                 </View>
@@ -452,6 +656,7 @@ export default function DashboardScreen() {
               </View>
 
               {/* OR */}
+
               <View style={styles.orContainer}>
 
                 <View style={styles.orLine} />
@@ -465,25 +670,37 @@ export default function DashboardScreen() {
               </View>
 
               {/* BIOMETRIC */}
+
               <View style={styles.biometricSection}>
 
                 <Text style={styles.searchLabel}>
                   Search by Biometric
                 </Text>
 
-                <View style={styles.biometricRow}>
+                <View
+                  style={[
+                    styles.biometricRow,
+                    isMobile && styles.mobileBiometricRow,
+                  ]}
+                >
 
                   <View style={styles.fingerprintIconBox}>
+
                     <Ionicons
                       name="finger-print-outline"
                       size={46}
                       color="#123B78"
                     />
+
                   </View>
 
                   <Pressable
-  style={styles.scanButton}
-  onPress={handleFingerprintScan}>
+                    style={[
+                      styles.scanButton,
+                      isMobile && styles.mobileScanButton,
+                    ]}
+                    onPress={handleFingerprintScan}
+                  >
 
                     <Text style={styles.scanButtonText}>
                       Scan Fingerprint
@@ -493,7 +710,12 @@ export default function DashboardScreen() {
 
                 </View>
 
-                <Text style={styles.fingerprintHelp}>
+                <Text
+                  style={[
+                    styles.fingerprintHelp,
+                    isMobile && styles.mobileFingerprintHelp,
+                  ]}
+                >
                   Place finger on the scanner
                 </Text>
 
@@ -507,132 +729,139 @@ export default function DashboardScreen() {
               LOWER AREA
           ================================================= */}
 
-          <View style={styles.lowerSection}>
+          <View
+            style={[
+              styles.lowerSection,
+              isMobile && styles.mobileLowerSection,
+              isTablet && styles.tabletLowerSection,
+            ]}
+          >
 
             {/* RECENTLY ACCESSED */}
+
             <View style={styles.recentCard}>
 
               <Text style={styles.cardSectionTitle}>
                 RECENTLY ACCESSED PATIENTS
               </Text>
 
-              {/* TABLE HEADER */}
-              <View style={styles.tableHeader}>
+              {/* HORIZONTAL TABLE SCROLL */}
 
-                <Text style={[styles.tableHeaderText, styles.patientIdColumn]}>
-                  Patient ID
-                </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
 
-                <Text style={[styles.tableHeaderText, styles.patientNameColumn]}>
-                  Patient Name
-                </Text>
+                <View style={styles.tableContainer}>
 
-                <Text style={[styles.tableHeaderText, styles.recordColumn]}>
-                  Record Type
-                </Text>
+                  {/* TABLE HEADER */}
 
-                <Text style={[styles.tableHeaderText, styles.accessedColumn]}>
-                  Accessed By
-                </Text>
+                  <View style={styles.tableHeader}>
 
-                <Text style={[styles.tableHeaderText, styles.facilityColumn]}>
-                  Facility
-                </Text>
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.patientIdColumn,
+                      ]}
+                    >
+                      Patient ID
+                    </Text>
 
-                <Text style={[styles.tableHeaderText, styles.timeColumn]}>
-                  Time
-                </Text>
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.patientNameColumn,
+                      ]}
+                    >
+                      Patient Name
+                    </Text>
 
-              </View>
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.recordColumn,
+                      ]}
+                    >
+                      Record Type
+                    </Text>
 
-              <RecentPatient
-                id="CL-0001"
-                name="John Doe"
-                recordType="Consultation"
-                accessedBy="Dr. Naidoo"
-                facility="Durban Central Clinic"
-                time="11:20"
-              />
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.accessedColumn,
+                      ]}
+                    >
+                      Accessed By
+                    </Text>
 
-              <RecentPatient
-                id="CL-0002"
-                name="Sarah Mokoena"
-                recordType="Lab Result"
-                accessedBy="Dr. Patel"
-                facility="Wentworth Clinic"
-                time="10:45"
-              />
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.facilityColumn,
+                      ]}
+                    >
+                      Facility
+                    </Text>
 
-              <RecentPatient
-                id="CL-0003"
-                name="Thabo Khumalo"
-                recordType="Radiology"
-                accessedBy="Dr. Naidoo"
-                facility="Durban Central Clinic"
-                time="10:15"
-              />
+                    <Text
+                      style={[
+                        styles.tableHeaderText,
+                        styles.timeColumn,
+                      ]}
+                    >
+                      Time
+                    </Text>
 
-              <RecentPatient
-                id="CL-0004"
-                name="Nomsa Dlamini"
-                recordType="Consultation"
-                accessedBy="Dr. Patel"
-                facility="Umlazi Clinic"
-                time="09:50"
-              />
+                  </View>
 
-              <RecentPatient
-                id="CL-0005"
-                name="Sipho Zulu"
-                recordType="Discharge Summary"
-                accessedBy="Dr. Naidoo"
-                facility="King Edward Hospital"
-                time="09:30"
-              />
+                  <RecentPatient
+                    id="CL-0001"
+                    name="John Doe"
+                    recordType="Consultation"
+                    accessedBy="Dr. Naidoo"
+                    facility="Durban Central Clinic"
+                    time="11:20"
+                  />
+
+                  <RecentPatient
+                    id="CL-0002"
+                    name="Sarah Mokoena"
+                    recordType="Lab Result"
+                    accessedBy="Dr. Patel"
+                    facility="Wentworth Clinic"
+                    time="10:45"
+                  />
+
+                  <RecentPatient
+                    id="CL-0003"
+                    name="Thabo Khumalo"
+                    recordType="Radiology"
+                    accessedBy="Dr. Naidoo"
+                    facility="Durban Central Clinic"
+                    time="10:15"
+                  />
+
+
+                </View>
+
+              </ScrollView>
 
               <Pressable
                 style={styles.viewAllButton}
-                onPress={() => router.push('/(app)/patients')}
+                onPress={() =>
+                  router.push('/(app)/patients')
+                }
               >
+
                 <Text style={styles.viewAllText}>
                   View all records
                 </Text>
+
               </Pressable>
 
             </View>
 
-            {/* SYSTEM STATUS */}
-            <View style={styles.statusCard}>
-
-              <Text style={styles.cardSectionTitle}>
-                SYSTEM STATUS
-              </Text>
-
-              <SystemStatus
-                icon="globe-outline"
-                title="National EHR Network"
-                status="Connected"
-              />
-
-              <SystemStatus
-                icon="share-social-outline"
-                title="Record Sharing"
-                status="Operational"
-              />
-
-              <SystemStatus
-                icon="finger-print-outline"
-                title="Biometric Service"
-                status="Operational"
-              />
-
-              <SystemStatus
-                icon="server-outline"
-                title="System"
-                status="Operational"
-              />
-
-            </View>
+           
 
           </View>
 
@@ -640,7 +869,12 @@ export default function DashboardScreen() {
               FOOTER
           ================================================= */}
 
-          <View style={styles.footer}>
+          <View
+            style={[
+              styles.footer,
+              isMobile && styles.mobileFooter,
+            ]}
+          >
 
             <Text style={styles.footerText}>
               Carelink Electronic Health Records System
@@ -683,6 +917,7 @@ export default function DashboardScreen() {
         </ScrollView>
 
       </View>
+
     </View>
   );
 }
@@ -705,6 +940,7 @@ function SidebarItem({
   emergency?: boolean;
   onPress?: () => void;
 }) {
+
   return (
     <Pressable
       onPress={onPress}
@@ -760,30 +996,61 @@ function RecentPatient({
   facility: string;
   time: string;
 }) {
+
   return (
     <Pressable style={styles.patientTableRow}>
 
-      <Text style={[styles.tableText, styles.patientIdColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.patientIdColumn,
+        ]}
+      >
         {id}
       </Text>
 
-      <Text style={[styles.tableText, styles.patientNameColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.patientNameColumn,
+        ]}
+      >
         {name}
       </Text>
 
-      <Text style={[styles.tableText, styles.recordColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.recordColumn,
+        ]}
+      >
         {recordType}
       </Text>
 
-      <Text style={[styles.tableText, styles.accessedColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.accessedColumn,
+        ]}
+      >
         {accessedBy}
       </Text>
 
-      <Text style={[styles.tableText, styles.facilityColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.facilityColumn,
+        ]}
+      >
         {facility}
       </Text>
 
-      <Text style={[styles.tableText, styles.timeColumn]}>
+      <Text
+        style={[
+          styles.tableText,
+          styles.timeColumn,
+        ]}
+      >
         {time}
       </Text>
 
@@ -805,15 +1072,18 @@ function SystemStatus({
   title: string;
   status: string;
 }) {
+
   return (
     <View style={styles.statusRow}>
 
       <View style={styles.statusIcon}>
+
         <Ionicons
           name="checkmark"
           size={16}
           color="#FFFFFF"
         />
+
       </View>
 
       <View style={styles.statusInfo}>
@@ -849,12 +1119,18 @@ function SystemStatus({
 
 const styles = StyleSheet.create({
 
-  /* APP */
+  /* ==========================================================
+     APP
+  ========================================================== */
 
   appContainer: {
     flex: 1,
     flexDirection: 'row',
     backgroundColor: '#F8FAFC',
+  },
+
+  mobileAppContainer: {
+    flexDirection: 'column',
   },
 
   loadingContainer: {
@@ -863,6 +1139,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
   },
+
 
   /* ==========================================================
      SIDEBAR
@@ -876,6 +1153,28 @@ const styles = StyleSheet.create({
     paddingVertical: 25,
     paddingHorizontal: 15,
     justifyContent: 'space-between',
+  },
+
+  tabletSidebar: {
+    width: 220,
+  },
+
+  mobileSidebar: {
+    position: 'absolute',
+    zIndex: 100,
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 280,
+    elevation: 10,
+
+    shadowOffset: {
+      width: 2,
+      height: 0,
+    },
+
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
 
   sidebarBrand: {
@@ -966,6 +1265,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
 
+
   /* ==========================================================
      MAIN
   ========================================================== */
@@ -974,6 +1274,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+
 
   /* ==========================================================
      HEADER
@@ -990,9 +1291,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
+  tabletHeader: {
+    paddingHorizontal: 18,
+  },
+
+  mobileHeader: {
+    height: 70,
+    paddingHorizontal: 12,
+  },
+
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
   },
 
   menuButton: {
@@ -1007,6 +1318,7 @@ const styles = StyleSheet.create({
   compactBrand: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
   },
 
   compactGovernmentLogo: {
@@ -1031,12 +1343,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 27,
+    flexShrink: 1,
+  },
+
+  mobileHeaderRight: {
+    gap: 8,
   },
 
   facilityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
+  },
+
+  mobileFacility: {
+    display: 'none',
   },
 
   facilityLabel: {
@@ -1108,6 +1429,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+
   /* ==========================================================
      CONTENT
   ========================================================== */
@@ -1122,11 +1444,28 @@ const styles = StyleSheet.create({
     paddingBottom: 35,
   },
 
+  tabletContent: {
+    paddingHorizontal: 20,
+    paddingTop: 22,
+  },
+
+  mobileContent: {
+    paddingHorizontal: 12,
+    paddingTop: 18,
+    paddingBottom: 25,
+  },
+
   pageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 18,
+  },
+
+  mobilePageHeader: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
   },
 
   pageTitle: {
@@ -1140,6 +1479,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+
 
   /* ==========================================================
      INFO BANNER
@@ -1168,10 +1508,12 @@ const styles = StyleSheet.create({
   },
 
   infoText: {
+    flex: 1,
     color: '#123B78',
     fontSize: 13,
     fontWeight: '600',
   },
+
 
   /* ==========================================================
      FIND PATIENT
@@ -1204,6 +1546,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
 
+  mobileSearchArea: {
+    flexDirection: 'column',
+    width: '100%',
+  },
+
   idSearchSection: {
     flex: 1,
   },
@@ -1220,6 +1567,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  mobileSearchRow: {
+    flexDirection: 'column',
+    width: '100%',
+    alignItems: 'stretch',
+  },
+
   inputContainer: {
     flex: 1,
     height: 51,
@@ -1230,6 +1583,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     backgroundColor: '#FFFFFF',
+  },
+
+  mobileInputContainer: {
+    width: '100%',
+    flex: 0,
   },
 
   patientInput: {
@@ -1251,6 +1609,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  mobileSearchButton: {
+    width: '100%',
+    marginLeft: 0,
+    marginTop: 10,
+  },
+
   searchButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
@@ -1263,7 +1627,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  /* OR */
+
+  /* ==========================================================
+     OR
+  ========================================================== */
 
   orContainer: {
     width: 75,
@@ -1285,7 +1652,10 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
 
-  /* BIOMETRIC */
+
+  /* ==========================================================
+     BIOMETRIC
+  ========================================================== */
 
   biometricSection: {
     flex: 1,
@@ -1295,6 +1665,11 @@ const styles = StyleSheet.create({
   biometricRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  mobileBiometricRow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
 
   fingerprintIconBox: {
@@ -1318,6 +1693,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  mobileScanButton: {
+    marginLeft: 0,
+    marginTop: 10,
+    minHeight: 53,
+    flex: 0,
+  },
+
   scanButtonText: {
     color: '#123B78',
     fontSize: 13,
@@ -1331,6 +1713,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
+  mobileFingerprintHelp: {
+    marginLeft: 0,
+    textAlign: 'center',
+  },
+
+
   /* ==========================================================
      LOWER SECTION
   ========================================================== */
@@ -1339,6 +1727,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 22,
     marginBottom: 28,
+  },
+
+  tabletLowerSection: {
+    gap: 16,
+  },
+
+  mobileLowerSection: {
+    flexDirection: 'column',
+    gap: 16,
   },
 
   recentCard: {
@@ -1368,9 +1765,14 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
   },
 
+
   /* ==========================================================
      TABLE
   ========================================================== */
+
+  tableContainer: {
+    minWidth: 760,
+  },
 
   tableHeader: {
     minHeight: 48,
@@ -1408,19 +1810,19 @@ const styles = StyleSheet.create({
   },
 
   patientNameColumn: {
-    flex: 1.2,
+    width: 150,
   },
 
   recordColumn: {
-    flex: 1.25,
+    width: 140,
   },
 
   accessedColumn: {
-    flex: 1.15,
+    width: 130,
   },
 
   facilityColumn: {
-    flex: 1.4,
+    width: 180,
   },
 
   timeColumn: {
@@ -1440,6 +1842,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+
 
   /* ==========================================================
      SYSTEM STATUS
@@ -1487,6 +1890,7 @@ const styles = StyleSheet.create({
     marginLeft: 24,
   },
 
+
   /* ==========================================================
      FOOTER
   ========================================================== */
@@ -1498,6 +1902,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 5,
+  },
+
+  mobileFooter: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    paddingVertical: 18,
+    gap: 8,
   },
 
   footerText: {
@@ -1521,4 +1932,5 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 11,
   },
+
 });
